@@ -40,10 +40,10 @@ Answer as Arnav:
 
 # Loaders
 def load_embeddings():
-return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+  return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 def load_vectorstore(embeddings):
-return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
+  return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
 def get_conversational_chain():
 llm = ChatGoogleGenerativeAI(
