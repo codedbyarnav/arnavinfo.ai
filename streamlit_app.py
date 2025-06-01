@@ -4,20 +4,19 @@ import streamlit as st
 
 from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 
-# Load environment variables
+# Load .env
 load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# Set Streamlit page config
+# Streamlit Config
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
-# Custom background color
+# Background Color
 st.markdown("""
     <style>
         body, .stApp {
@@ -25,9 +24,6 @@ st.markdown("""
         }
     </style>
 """, unsafe_allow_html=True)
-
-# Constants
-VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
 # Prompt Template
 PROMPT_TEMPLATE = """
@@ -47,7 +43,7 @@ Question:
 Answer as Arnav:
 """
 
-# Stream Handler for real-time token streaming
+# Stream Handler for token streaming
 class StreamHandler(BaseCallbackHandler):
     def __init__(self, container):
         self.container = container
@@ -57,72 +53,69 @@ class StreamHandler(BaseCallbackHandler):
         self.text += token
         self.container.markdown(self.text)
 
-# Load embeddings and vectorstore
+# Embeddings + Vector DB
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 def load_vectorstore(embeddings):
-    return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
+    return FAISS.load_local("vectorstore/db_faiss", embeddings, allow_dangerous_deserialization=True)
 
-# Initialize the chain with streaming
-def get_conversational_chain(container):
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
-        temperature=0.3,
-        google_api_key=GOOGLE_API_KEY,
-        streaming=True,
-        callbacks=[StreamHandler(container)]
-    )
+# Set up memory and embeddings once
+if "memory" not in st.session_state:
+    st.session_state.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-    embeddings = load_embeddings()
-    vector_db = load_vectorstore(embeddings)
-
-    prompt = PromptTemplate(
-        input_variables=["context", "question"],
-        template=PROMPT_TEMPLATE
-    )
-
-    return ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=vector_db.as_retriever(),
-        memory=memory,
-        combine_docs_chain_kwargs={"prompt": prompt}
-    )
+if "embedding" not in st.session_state:
+    st.session_state.embedding = load_embeddings()
+    st.session_state.db = load_vectorstore(st.session_state.embedding)
 
 # UI Header
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Initialize memory
-if "chat_chain" not in st.session_state:
-    st.session_state.chat_chain = None  # We'll set this inside the loop
-
-# Display chat history
+# Chat history
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
+# Show previous messages
 for role, msg in st.session_state.chat_history:
     with st.chat_message(role, avatar="🧑‍💻" if role == "user" else "🤖"):
         st.markdown(msg)
 
 # Chat Input
-user_input = st.chat_input("Ask Arnav anything...")
+user_question = st.chat_input("Ask Arnav anything...")
 
-if user_input:
-    # Show user message
-    st.session_state.chat_history.append(("user", user_input))
+if user_question:
+    # Show user input
+    st.session_state.chat_history.append(("user", user_question))
     with st.chat_message("user", avatar="🧑‍💻"):
-        st.markdown(user_input)
+        st.markdown(user_question)
 
-    # Placeholder for streamed assistant response
+    # Get context
+    docs = st.session_state.db.similarity_search(user_question, k=4)
+    context = "\n\n".join(doc.page_content for doc in docs)
+
+    # Format prompt
+    prompt = PromptTemplate(input_variables=["context", "question"], template=PROMPT_TEMPLATE)
+    full_prompt = prompt.format(context=context, question=user_question)
+
+    # Display streamed answer
     with st.chat_message("assistant", avatar="🤖"):
-        response_container = st.empty()
-        st.session_state.chat_chain = get_conversational_chain(response_container)
-        response = st.session_state.chat_chain({"question": user_input})
-        final_response = response["answer"]
-        st.session_state.chat_history.append(("assistant", final_response))
+        stream_container = st.empty()
+        handler = StreamHandler(stream_container)
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            temperature=0.3,
+            google_api_key=GOOGLE_API_KEY,
+            streaming=True,
+            callbacks=[handler]
+        )
+
+        _ = llm.invoke(full_prompt)  # Streaming happens via callback
+
+        # Append full text to chat history
+        st.session_state.chat_history.append(("assistant", handler.text))
 
 # Footer
 st.markdown("""
