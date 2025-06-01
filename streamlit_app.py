@@ -2,7 +2,6 @@ import os
 from dotenv import load_dotenv
 import streamlit as st
 
-# Set page config FIRST thing
 st.set_page_config(page_title="RealMe.AI", page_icon="🧠")
 
 from langchain_community.vectorstores import FAISS
@@ -12,7 +11,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 
-# Load environment variables
+
 load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
@@ -88,10 +87,10 @@ st.markdown(
     """
     <hr>
     <div style="text-align: center;">
-        <a href="https://www.linkedin.com/in/arnav-atri-315547347/" target="_blank" style="text-decoration: none; margin-right: 30px;">
+        <a href="https://github.com/codedbyarnav" target="_blank" style="text-decoration: none; margin-right: 30px;">
             🔗 <strong>LinkedIn</strong>
         </a>
-        <a href="https://mail.google.com/mail/u/0/#inbox?compose=GTvVlcSBnNcblfwfSgSFZWGLxNSPBnXJBqKpPpfNxdCFMJzfQFHbkxNprTnrsTVZbLlCnnxCjPRhQ" target="_blank" style="text-decoration: none;">
+        <a href="https://mail.google.com/mail/?view=cm&fs=1&to=arnavatri5@gmail.com&su=Hello+Arnav&body=I+found+your+RealMe.AI+chatbot+amazing!" target="_blank">
             📧 <strong>Email</strong>
         </a>
     </div>
