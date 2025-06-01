@@ -16,15 +16,6 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 # Streamlit Config
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
-# Background Color
-st.markdown("""
-    <style>
-        body, .stApp {
-            background-color: #fffdf6;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
 # Prompt Template
 PROMPT_TEMPLATE = """
 You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
