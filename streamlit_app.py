@@ -15,6 +15,18 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # Page settings
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
+# Custom background color
+st.markdown("""
+    <style>
+        body {
+            background-color: #fffdf6;  
+        }
+        .stApp {
+            background-color: #fffdf6;  
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 
 # Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
