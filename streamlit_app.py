@@ -15,33 +15,6 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # Page settings
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
-# Custom background color
-st.markdown("""
-    <style>
-        html, body, [class*="css"]  {
-            background-color: #fffdf6 !important;  /* Cream */
-        }
-        .stApp {
-            background-color: #fffdf6 !important;
-        }
-        .stChatMessage {
-            background-color: #ffffff;  /* White message cards */
-            border-radius: 10px;
-            padding: 10px;
-            margin-bottom: 10px;
-        }
-        .block-container {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-            background-color: #fffdf6 !important;
-        }
-        .stChatInputContainer {
-            background-color: #fffaf0 !important;
-            padding: 10px;
-            border-radius: 8px;
-        }
-    </style>
-""", unsafe_allow_html=True)
 
 
 # Constants
