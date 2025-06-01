@@ -13,74 +13,13 @@ from langchain.prompts import PromptTemplate
 load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# Page config
-st.set_page_config(page_title="RealMe.AI", layout="centered")
+# Page settings
+st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
-# Custom CSS for styling
-st.markdown("""
-<style>
-body {
-    background-color: #f7f9fc;
-}
-.header {
-    background-color: #003366;
-    padding: 30px;
-    border-radius: 10px;
-    color: white;
-    text-align: center;
-    margin-bottom: 20px;
-}
-.header h1 {
-    margin: 0;
-    font-size: 2.5em;
-}
-.header p {
-    font-size: 1.2em;
-    margin-top: 10px;
-}
-.chat-bubble-user {
-    background-color: #d1e3ff;
-    padding: 12px;
-    border-radius: 10px;
-    margin-bottom: 10px;
-    width: fit-content;
-    max-width: 85%;
-}
-.chat-bubble-bot {
-    background-color: #e6f4f1;
-    padding: 12px;
-    border-radius: 10px;
-    margin-bottom: 10px;
-    width: fit-content;
-    max-width: 85%;
-}
-.footer {
-    margin-top: 40px;
-    text-align: center;
-}
-.footer a {
-    background-color: #003366;
-    color: white;
-    padding: 10px 20px;
-    border-radius: 6px;
-    margin: 0 10px;
-    text-decoration: none;
-}
-.footer a:hover {
-    background-color: #005580;
-}
-</style>
-""", unsafe_allow_html=True)
+# Constants
+VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
-# Header
-st.markdown("""
-<div class="header">
-    <h1>RealMe.AI</h1>
-    <p>Ask anything about Arnav Atri — his projects, passions, and journey</p>
-</div>
-""", unsafe_allow_html=True)
-
-# Prompt template
+# Custom Prompt
 PROMPT_TEMPLATE = """
 You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
 
@@ -98,9 +37,7 @@ Question:
 Answer as Arnav:
 """
 
-# Vector + chain setup
-VECTOR_STORE_PATH = "vectorstore/db_faiss"
-
+# Loaders
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
@@ -129,32 +66,44 @@ def get_conversational_chain():
         combine_docs_chain_kwargs={"prompt": prompt}
     )
 
-# Initialize session
+# UI Header
+st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
+st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
+st.divider()
+
+# Load chat chain
 if "chat_chain" not in st.session_state:
     st.session_state.chat_chain = get_conversational_chain()
 
-# Chat history display
+# Display chat history
 for message in st.session_state.chat_chain.memory.chat_memory.messages:
-    if message.type == "human":
-        st.markdown(f"<div class='chat-bubble-user'><strong>You:</strong><br>{message.content}</div>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<div class='chat-bubble-bot'><strong>Arnav:</strong><br>{message.content}</div>", unsafe_allow_html=True)
+    with st.chat_message("user" if message.type == "human" else "assistant", avatar="🧑‍💻" if message.type == "human" else "🤖"):
+        st.markdown(message.content)
 
-# Input
+# Chat Input
 user_input = st.chat_input("Ask Arnav anything...")
 
 if user_input:
-    st.markdown(f"<div class='chat-bubble-user'><strong>You:</strong><br>{user_input}</div>", unsafe_allow_html=True)
+    with st.chat_message("user", avatar="🧑‍💻"):
+        st.markdown(user_input)
 
     response = st.session_state.chat_chain({"question": user_input})
     bot_reply = response["answer"]
 
-    st.markdown(f"<div class='chat-bubble-bot'><strong>Arnav:</strong><br>{bot_reply}</div>", unsafe_allow_html=True)
+    with st.chat_message("assistant", avatar="🤖"):
+        st.markdown(bot_reply)
 
-# Footer with contact buttons
+# Footer with contact links
 st.markdown("""
-<div class="footer">
-    <a href="https://www.linkedin.com/in/arnav-atri-315547347/" target="_blank">Connect on LinkedIn</a>
-    <a href="https://mail.google.com/mail/?view=cm&fs=1&to=arnavatri5@gmail.com&su=Hello+Arnav&body=I+found+your+RealMe.AI+chatbot+amazing!" target="_blank">Email Arnav</a>
+<hr style="margin-top: 30px;">
+<div style="text-align: center; font-size: 16px;">
+    🤝 <strong>Let’s connect</strong><br>
+    <a href="https://www.linkedin.com/in/arnav-atri-315547347/" target="_blank" style="text-decoration: none; margin: 0 20px;">
+        🔗 LinkedIn
+    </a>
+    |
+    <a href="https://mail.google.com/mail/?view=cm&fs=1&to=arnavatri5@gmail.com&su=Hello+Arnav&body=I+found+your+RealMe.AI+chatbot+amazing!" target="_blank" style="text-decoration: none;">
+        📧 Email
+    </a>
 </div>
 """, unsafe_allow_html=True)
