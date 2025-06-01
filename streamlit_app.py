@@ -8,19 +8,28 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
+from langchain.callbacks.base import BaseCallbackHandler
 
 # Load environment variables
 load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# Page settings
+# Set Streamlit page config
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
+# Custom background color
+st.markdown("""
+    <style>
+        body, .stApp {
+            background-color: #fffdf6;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
-# Custom Prompt
+# Prompt Template
 PROMPT_TEMPLATE = """
 You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
 
@@ -38,19 +47,33 @@ Question:
 Answer as Arnav:
 """
 
-# Loaders
+# Stream Handler for real-time token streaming
+class StreamHandler(BaseCallbackHandler):
+    def __init__(self, container):
+        self.container = container
+        self.text = ""
+
+    def on_llm_new_token(self, token: str, **kwargs):
+        self.text += token
+        self.container.markdown(self.text)
+
+# Load embeddings and vectorstore
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-def get_conversational_chain():
+# Initialize the chain with streaming
+def get_conversational_chain(container):
     llm = ChatGoogleGenerativeAI(
         model="gemini-1.5-flash",
         temperature=0.3,
-        google_api_key=GOOGLE_API_KEY
+        google_api_key=GOOGLE_API_KEY,
+        streaming=True,
+        callbacks=[StreamHandler(container)]
     )
+
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
@@ -72,29 +95,36 @@ st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Load chat chain
+# Initialize memory
 if "chat_chain" not in st.session_state:
-    st.session_state.chat_chain = get_conversational_chain()
+    st.session_state.chat_chain = None  # We'll set this inside the loop
 
 # Display chat history
-for message in st.session_state.chat_chain.memory.chat_memory.messages:
-    with st.chat_message("user" if message.type == "human" else "assistant", avatar="🧑‍💻" if message.type == "human" else "🤖"):
-        st.markdown(message.content)
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+for role, msg in st.session_state.chat_history:
+    with st.chat_message(role, avatar="🧑‍💻" if role == "user" else "🤖"):
+        st.markdown(msg)
 
 # Chat Input
 user_input = st.chat_input("Ask Arnav anything...")
 
 if user_input:
+    # Show user message
+    st.session_state.chat_history.append(("user", user_input))
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-    response = st.session_state.chat_chain({"question": user_input})
-    bot_reply = response["answer"]
-
+    # Placeholder for streamed assistant response
     with st.chat_message("assistant", avatar="🤖"):
-        st.markdown(bot_reply)
+        response_container = st.empty()
+        st.session_state.chat_chain = get_conversational_chain(response_container)
+        response = st.session_state.chat_chain({"question": user_input})
+        final_response = response["answer"]
+        st.session_state.chat_history.append(("assistant", final_response))
 
-# Footer with contact links
+# Footer
 st.markdown("""
 <hr style="margin-top: 30px;">
 <div style="text-align: center; font-size: 16px;">
