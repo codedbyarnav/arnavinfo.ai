@@ -87,7 +87,7 @@ st.markdown(
     """
     <hr>
     <div style="text-align: center;">
-        <a href="https://github.com/codedbyarnav" target="_blank" style="text-decoration: none; margin-right: 30px;">
+        <a href="https://www.linkedin.com/in/arnav-atri-315547347/" target="_blank" style="text-decoration: none; margin-right: 30px;">
             🔗 <strong>LinkedIn</strong>
         </a>
         <a href="https://mail.google.com/mail/?view=cm&fs=1&to=arnavatri5@gmail.com&su=Hello+Arnav&body=I+found+your+RealMe.AI+chatbot+amazing!" target="_blank">
