@@ -8,7 +8,18 @@ from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
 from langchain_groq import ChatGroq
-from langchain.callbacks.streamlit import StreamlitCallbackHandler
+from langchain.callbacks.base import BaseCallbackHandler
+
+# Custom Streamlit callback handler to stream tokens live with no "Complete!" message
+class NoCompleteStreamHandler(BaseCallbackHandler):
+    def __init__(self, container):
+        self.container = container
+        self.text_element = container.empty()
+        self.text = ""
+
+    def on_llm_new_token(self, token: str, **kwargs):
+        self.text += token
+        self.text_element.markdown(self.text)
 
 # Load environment variables
 load_dotenv()
@@ -93,7 +104,7 @@ if user_input:
 
     # Show assistant message with streaming
     with st.chat_message("assistant", avatar="🤖"):
-        stream_handler = StreamlitCallbackHandler(st.container(), show_complete=False)
+        stream_handler = NoCompleteStreamHandler(st.container())
         st.session_state.chat_chain(
             {"question": user_input},
             callbacks=[stream_handler]
