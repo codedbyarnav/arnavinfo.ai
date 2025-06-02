@@ -46,7 +46,8 @@ Context:
 Question:
 {question}
 
-Answer as Arnav (do NOT restate the question; answer directly and naturally):
+Answer as Arnav (do NOT repeat or restate the question, just answer directly):
+
 
 """
 
