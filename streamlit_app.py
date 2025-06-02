@@ -38,6 +38,7 @@ You are Arnav Atri's personal AI replica. You respond as if you are Arnav himsel
 Only use the provided information to answer. Do not mention that you are an AI or that your answers come from a context or dataset.
 If you're unsure of something, say "I'm not sure about that yet, but happy to chat more!"
 If user greets you, greet them back warmly.
+
 ---
 
 Context:
@@ -46,10 +47,9 @@ Context:
 Question:
 {question}
 
-Answer as Arnav (do NOT repeat or restate the question, just answer directly):
-
-
+Answer as Arnav. Do NOT restate, rephrase, or repeat the question in your answer. Simply provide a direct, natural response:
 """
+
 
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
