@@ -68,30 +68,33 @@ def get_conversational_chain():
         combine_docs_chain_kwargs={"prompt": prompt}
     )
 
-# UI
+# Streamlit UI
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
+# Load or create the chain
 if "chat_chain" not in st.session_state:
     st.session_state.chat_chain = get_conversational_chain()
 
-# Display history
+# Display chat history
 for message in st.session_state.chat_chain.memory.chat_memory.messages:
     with st.chat_message("user" if message.type == "human" else "assistant",
                          avatar="🧑‍💻" if message.type == "human" else "🤖"):
         st.markdown(message.content)
 
+# Chat input box
 user_input = st.chat_input("Ask Arnav anything...")
 
 if user_input:
+    # Show user message
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
+    # Show assistant message with streaming
     with st.chat_message("assistant", avatar="🤖"):
         stream_handler = StreamlitCallbackHandler(st.container())
-        response = st.session_state.chat_chain(
+        st.session_state.chat_chain(
             {"question": user_input},
             callbacks=[stream_handler]
         )
-
