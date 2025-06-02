@@ -93,7 +93,7 @@ if user_input:
 
     # Show assistant message with streaming
     with st.chat_message("assistant", avatar="🤖"):
-        stream_handler = StreamlitCallbackHandler(st.container())
+        stream_handler = StreamlitCallbackHandler(st.container(), show_complete=False)
         st.session_state.chat_chain(
             {"question": user_input},
             callbacks=[stream_handler]
