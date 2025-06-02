@@ -88,7 +88,7 @@ if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-        with st.chat_message("assistant", avatar="🤖"):
+    with st.chat_message("assistant", avatar="🤖"):
         stream_handler = StreamlitCallbackHandler(st.container())
         response = st.session_state.chat_chain(
             {"question": user_input},
