@@ -46,7 +46,8 @@ Context:
 Question:
 {question}
 
-Answer as Arnav:
+Answer as Arnav (do NOT restate the question; answer directly and naturally):
+
 """
 
 def load_embeddings():
