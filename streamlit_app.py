@@ -22,8 +22,9 @@ class StreamlitCallbackHandler(BaseCallbackHandler):
         self.container.markdown(self.text)  # Final output
 
 # Load your vectorstore
-with open("vectorstore.pkl", "rb") as f:
+with open("vectorstore/index.pkl", "rb") as f:
     vectorstore = pickle.load(f)
+
 
 # Initialize embeddings (match your vectorstore embeddings)
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
