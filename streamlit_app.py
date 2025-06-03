@@ -111,14 +111,17 @@ user_input = st.chat_input("Ask Arnav anything...")
 
 # Handle new input
 if user_input:
+    # Show user message
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-    response_container = st.container()  # Create a separate container for streaming output
-    
+    # Show assistant message with streaming
     with st.chat_message("assistant", avatar="🤖"):
-        st.session_state.chat_chain = get_conversational_chain(response_container)
-        _ = st.session_state.chat_chain({"question": user_input})
+        stream_handler = NoCompleteStreamHandler(st.container())
+        st.session_state.chat_chain(
+            {"question": user_input},
+            callbacks=[stream_handler]
+        )
 
 
 # Display chat history
