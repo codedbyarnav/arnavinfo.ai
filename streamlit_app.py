@@ -67,21 +67,18 @@ def load_embeddings():
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# Get conversational chain with callback container
-def get_conversational_chain(container):
-    stream_handler = NoCompleteStreamHandler(container)
-    callback_manager = CallbackManager([stream_handler])
+# Initialize the conversational chain only once (no container here)
+def get_conversational_chain():
+    embeddings = load_embeddings()
+    vector_db = load_vectorstore(embeddings)
 
     llm = ChatGroq(
         temperature=0,
         model_name="llama3-70b-8192",
         api_key=GROQ_API_KEY,
         streaming=True,
-        callback_manager=callback_manager
+        # Note: Do NOT pass callback_manager here because we will pass callbacks per call
     )
-
-    embeddings = load_embeddings()
-    vector_db = load_vectorstore(embeddings)
 
     prompt = PromptTemplate(
         input_variables=["context", "question"],
@@ -102,30 +99,40 @@ st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Initialize memory if needed
+# Initialize memory and chat_chain if needed
 if "chat_memory" not in st.session_state:
     st.session_state.chat_memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+
+if "chat_chain" not in st.session_state:
+    st.session_state.chat_chain = get_conversational_chain()
 
 # Get user input
 user_input = st.chat_input("Ask Arnav anything...")
 
-# Handle new input
 if user_input:
     # Show user message
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
+    # Container for streaming output (inside assistant message)
+    response_container = st.container()
+
     # Show assistant message with streaming
     with st.chat_message("assistant", avatar="🤖"):
-        stream_handler = NoCompleteStreamHandler(st.container())
-        st.session_state.chat_chain(
+        stream_handler = NoCompleteStreamHandler(response_container)
+        response = st.session_state.chat_chain(
             {"question": user_input},
             callbacks=[stream_handler]
         )
 
+    # Update chat memory with the user message and AI response
+    st.session_state.chat_memory.chat_memory.add_user_message(user_input)
+    st.session_state.chat_memory.chat_memory.add_ai_message(response["answer"])
 
-# Display chat history
+# Render full chat history below
 for message in st.session_state.chat_memory.chat_memory.messages:
-    with st.chat_message("user" if message.type == "human" else "assistant",
-                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
+    with st.chat_message(
+        "user" if message.type == "human" else "assistant",
+        avatar="🧑‍💻" if message.type == "human" else "🤖"
+    ):
         st.markdown(message.content)
