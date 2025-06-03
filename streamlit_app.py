@@ -82,11 +82,12 @@ def load_vectorstore(embeddings):
 # Set up LangChain conversation chain
 def get_conversational_chain():
     llm = ChatGroq(
-        model_name="llama3-70b-8192",
-        temperature=0.3,
-        streaming=True,
-        api_key=GROQ_API_KEY,
-    )
+    model_name="mixtral-8x7b-32768",
+    temperature=0.3,
+    streaming=True,
+    api_key=GROQ_API_KEY,
+)
+
 
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     embeddings = load_embeddings()
