@@ -21,7 +21,7 @@ st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 # Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
-# Custom Prompt
+# Custom Prompt Template
 PROMPT_TEMPLATE = """
 You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
 
@@ -49,7 +49,7 @@ Question:
 Answer as Arnav. Do NOT include the question in your answer. Provide only a direct and natural response:
 """
 
-# Callback handler for streaming
+# Streaming callback handler
 class NoCompleteStreamHandler(BaseCallbackHandler):
     def __init__(self, container):
         self.container = container
@@ -67,7 +67,7 @@ def load_embeddings():
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# Get conversational chain
+# Get conversational chain with callback container
 def get_conversational_chain(container):
     stream_handler = NoCompleteStreamHandler(container)
     callback_manager = CallbackManager([stream_handler])
@@ -97,34 +97,28 @@ def get_conversational_chain(container):
         combine_docs_chain_kwargs={"prompt": prompt}
     )
 
-# Streamlit UI
+# UI header
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Session state setup
+# Initialize memory if needed
 if "chat_memory" not in st.session_state:
     st.session_state.chat_memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-if "chat_chain" not in st.session_state:
-    st.session_state.chat_chain = get_conversational_chain(st.container())
-
-# Chat input
+# Get user input
 user_input = st.chat_input("Ask Arnav anything...")
 
+# Handle new input
 if user_input:
-    # Show user input
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-    # Stream assistant response
-    with st.chat_message("assistant", avatar="🤖"):
+    with st.chat_message("assistant", avatar="🤖") as container:
+        st.session_state.chat_chain = get_conversational_chain(container)
         _ = st.session_state.chat_chain({"question": user_input})
 
-    # Avoid double display of response
-    st.stop()
-
-# Render chat history (only when not responding live)
+# Display chat history
 for message in st.session_state.chat_memory.chat_memory.messages:
     with st.chat_message("user" if message.type == "human" else "assistant",
                          avatar="🧑‍💻" if message.type == "human" else "🤖"):
