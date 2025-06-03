@@ -31,26 +31,22 @@ st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 # Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
-# Custom Prompt (NO question repetition in answers)
+# Custom Prompt
 PROMPT_TEMPLATE = """
-You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
+You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly and personal tone.
 
-Only use the provided information to answer. Do not mention that you are an AI or that your answers come from a context or dataset.
-If you're unsure of something, say "I'm not sure about that yet, but happy to chat more!"
-If the user greets you, greet them back warmly.
+🛑 STRICT RULES:
+- NEVER repeat or rephrase the user's question.
+- NEVER say things like "What can you tell me about..." or "You asked..." or any form of the question.
+- Just answer directly and personally.
+- If greeted, greet warmly.
+- If unsure, say: "I'm not sure about that yet, but happy to chat more!"
 
-⚠️ Rules:
-- NEVER restate, rephrase, or repeat the user's question.
-- NEVER ask the same question back.
-- NEVER say things like "You asked...", "What can I tell you...", or repeat any part of the question.
-- You must answer directly and naturally, as Arnav would.
-- You must NEVER restate or ask the question again.
-
-✅ Example:
-User: What is your name?
-✅ Answer: I'm Arnav Atri!
-❌ Bad: What is your name? I'm Arnav Atri.
-❌ Bad: You asked my name. I'm Arnav Atri.
+✅ Examples:
+User: What's your name?
+✅ Response: I'm Arnav Atri!
+❌ Wrong: What's your name? I'm Arnav Atri.
+❌ Wrong: You asked my name. I'm Arnav Atri.
 
 ---
 
@@ -60,10 +56,8 @@ Context:
 Question:
 {question}
 
-Answer as Arnav. Only provide a direct, friendly answer. Do NOT include the question or rephrase it in any way:
+Answer as Arnav. Only respond with a friendly answer, NO repetition:
 """
-
-
 
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -77,6 +71,7 @@ def get_conversational_chain():
         temperature=0.3,
         streaming=True,
         api_key=GROQ_API_KEY,
+        stop=["Question:", "Q:", "You asked", "What can you", "What's your question"]
     )
 
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
@@ -114,14 +109,20 @@ for message in st.session_state.chat_chain.memory.chat_memory.messages:
 user_input = st.chat_input("Ask Arnav anything...")
 
 if user_input:
-    # Show user message
-    with st.chat_message("user", avatar="🧑‍💻"):
-        st.markdown(user_input)
+    # Acknowledgment-only shortcut
+    if user_input.lower().strip() in ["ok", "okay", "okk", "thanks", "thank you"]:
+        with st.chat_message("user", avatar="🧑‍💻"):
+            st.markdown(user_input)
+        with st.chat_message("assistant", avatar="🤖"):
+            st.markdown("😊 Got it!")
+    else:
+        with st.chat_message("user", avatar="🧑‍💻"):
+            st.markdown(user_input)
 
-    # Show assistant message with streaming
-    with st.chat_message("assistant", avatar="🤖"):
-        stream_handler = NoCompleteStreamHandler(st.container())
-        st.session_state.chat_chain(
-            {"question": user_input},
-            callbacks=[stream_handler]
-        )
+        with st.chat_message("assistant", avatar="🤖"):
+            stream_handler = NoCompleteStreamHandler(st.container())
+            st.session_state.chat_chain(
+                {"question": user_input},
+                callbacks=[stream_handler]
+            )
+
