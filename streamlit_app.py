@@ -1,78 +1,91 @@
 import os
 from dotenv import load_dotenv
 import streamlit as st
+import re
 
 from langchain_community.vectorstores import FAISS
 from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
-from langchain.chains import ConversationalRetrievalChain
 from langchain_groq import ChatGroq
+from langchain.callbacks.base import BaseCallbackHandler
+from langchain.schema import HumanMessage, AIMessage
 
-# Comprehensive response cleaner
-def clean_response(response: str, original_question: str = "") -> str:
-    """Remove question repetition and reformulation from response"""
-    
-    # Remove common question reformulation patterns
-    patterns_to_remove = [
-        "Here is the rephrased standalone question:",
-        "Here's the rephrased question:",
-        "Rephrased question:",
-        "The question is:",
-        "Question:",
-        "Here is the answer:",
-        "Answer:",
+# Custom Streamlit callback handler for clean streaming
+class CleanStreamHandler(BaseCallbackHandler):
+    def __init__(self, container):
+        self.container = container
+        self.text_element = container.empty()
+        self.text = ""
+        self.full_response = ""
+        self.started_answer = False
+
+    def on_llm_new_token(self, token: str, **kwargs):
+        self.full_response += token
+        
+        # Look for patterns that indicate we've moved past question reformulation
+        if not self.started_answer:
+            # Check if we've hit the actual answer part
+            if any(indicator in self.full_response.lower() for indicator in [
+                "i'm arnav", "my name is", "i am arnav", "hello there", "hi there",
+                "i really", "i enjoy", "i love", "i work", "i study"
+            ]):
+                # Find where the answer actually starts
+                lines = self.full_response.split('\n')
+                answer_lines = []
+                found_start = False
+                
+                for line in lines:
+                    if found_start:
+                        answer_lines.append(line)
+                    elif any(indicator in line.lower() for indicator in [
+                        "i'm arnav", "my name is", "i am arnav", "hello there", "hi there",
+                        "i really", "i enjoy", "i love", "i work", "i study"
+                    ]):
+                        found_start = True
+                        answer_lines.append(line)
+                
+                self.text = '\n'.join(answer_lines)
+                self.started_answer = True
+        else:
+            self.text += token
+        
+        # Only display if we've started the actual answer
+        if self.started_answer:
+            self.text_element.markdown(self.text)
+
+# Function to extract context from vector store
+def get_relevant_context(question: str, vector_db, k=4):
+    docs = vector_db.similarity_search(question, k=k)
+    return "\n\n".join([doc.page_content for doc in docs])
+
+# Function to clean response from any remaining artifacts
+def final_clean_response(response: str) -> str:
+    # Remove any remaining question reformulation patterns
+    patterns = [
+        r"Here is the rephrased standalone question:.*?\?",
+        r"Rephrased question:.*?\?",
+        r"The question is:.*?\?",
+        r"What do you do and what are you interested in\?",
+        r"Tell me about yourself\?",
+        r".*?standalone question.*?\?"
     ]
     
-    for pattern in patterns_to_remove:
-        if pattern in response:
-            response = response.split(pattern)[-1]
+    for pattern in patterns:
+        response = re.sub(pattern, "", response, flags=re.IGNORECASE | re.DOTALL)
     
-    # Split by lines and find where the actual answer starts
+    # Clean up any remaining artifacts
     lines = response.split('\n')
     cleaned_lines = []
-    answer_started = False
     
     for line in lines:
         line = line.strip()
-        if not line:
-            if answer_started:
-                cleaned_lines.append("")
-            continue
-        
-        # Skip lines that look like question repetition
-        if (line.lower().startswith(('tell me', 'what is', 'what are', 'how', 'when', 'where', 'why', 'can you')) 
-            and not answer_started):
-            continue
-            
-        # Look for the start of actual answer
-        if (line.lower().startswith(('i\'m arnav', 'my name is', 'i am arnav', 'hello', 'hi there', 'i\'m ', 'i am ')) 
-            or 'arnav atri' in line.lower() 
-            or any(phrase in line.lower() for phrase in ['i really', 'i love', 'i work', 'i study', 'i enjoy'])):
-            answer_started = True
-            cleaned_lines.append(line)
-        elif answer_started:
-            cleaned_lines.append(line)
-        elif not any(char in line for char in '?'):  # If no question mark, might be answer
-            answer_started = True
+        if line and not any(unwanted in line.lower() for unwanted in [
+            'here is the rephrased', 'rephrased question', 'what do you do and what are you'
+        ]):
             cleaned_lines.append(line)
     
-    # Join the cleaned lines
-    result = '\n'.join(cleaned_lines).strip()
-    
-    # If we didn't find a clear answer start, return everything after first few lines
-    if not result or len(result) < 20:
-        lines = response.split('\n')
-        # Skip first 1-2 lines if they look like questions
-        start_idx = 0
-        for i, line in enumerate(lines[:3]):
-            if line.strip() and ('?' in line or any(q in line.lower() for q in ['tell me', 'what is', 'what are'])):
-                start_idx = i + 1
-            else:
-                break
-        result = '\n'.join(lines[start_idx:]).strip()
-    
-    return result if result else response
+    return '\n'.join(cleaned_lines).strip()
 
 # Load environment variables
 load_dotenv()
@@ -84,86 +97,112 @@ st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 # Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
-# Improved Custom Prompt with stronger instructions
-PROMPT_TEMPLATE = """
-You are Arnav Atri speaking directly. Answer naturally as yourself.
+# Direct prompt template without conversation chain complexity
+DIRECT_PROMPT_TEMPLATE = """
+You are Arnav Atri. Respond naturally and directly as yourself. Use the provided context to answer accurately.
 
-STRICT RULES:
-1. DO NOT repeat the user's question
-2. DO NOT say "Here is the rephrased question" or similar
-3. DO NOT reformulate or rephrase the question
-4. Start immediately with your answer as Arnav
-5. Be conversational and personal
+CRITICAL: 
+- Do NOT repeat the user's question
+- Do NOT say "Here is the rephrased question" or similar phrases
+- Start immediately with your natural response as Arnav
+- Be conversational and personal
 
-Context: {context}
-User: {question}
+Context about Arnav:
+{context}
 
-Arnav:""".strip()
+User asked: {question}
+
+Arnav responds:"""
 
 # Load Hugging Face embeddings
+@st.cache_resource
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 # Load FAISS vectorstore
-def load_vectorstore(embeddings):
+@st.cache_resource
+def load_vectorstore():
+    embeddings = load_embeddings()
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# Set up LangChain conversation chain
-def get_conversational_chain():
-    llm = ChatGroq(
+# Initialize LLM
+@st.cache_resource
+def get_llm():
+    return ChatGroq(
         model_name="mixtral-8x7b-32768",
         temperature=0.3,
-        streaming=False,  # Disable streaming for clean post-processing
+        streaming=True,
         api_key=GROQ_API_KEY,
     )
 
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-    embeddings = load_embeddings()
-    vector_db = load_vectorstore(embeddings)
-
+# Custom conversation function
+def get_response(question: str, chat_history: list):
+    vector_db = load_vectorstore()
+    llm = get_llm()
+    
+    # Get relevant context
+    context = get_relevant_context(question, vector_db)
+    
+    # Create prompt
     prompt = PromptTemplate(
         input_variables=["context", "question"],
-        template=PROMPT_TEMPLATE
+        template=DIRECT_PROMPT_TEMPLATE
     )
-
-    return ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=vector_db.as_retriever(),
-        memory=memory,
-        combine_docs_chain_kwargs={"prompt": prompt}
-    )
+    
+    # Format the prompt
+    formatted_prompt = prompt.format(context=context, question=question)
+    
+    return llm, formatted_prompt
 
 # Streamlit UI
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Load or create the chain
-if "chat_chain" not in st.session_state:
-    st.session_state.chat_chain = get_conversational_chain()
+# Initialize chat history in session state
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
 # Display chat history
-for message in st.session_state.chat_chain.memory.chat_memory.messages:
-    with st.chat_message("user" if message.type == "human" else "assistant",
-                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
-        st.markdown(message.content)
+for message in st.session_state.messages:
+    with st.chat_message(message["role"], avatar="🧑‍💻" if message["role"] == "user" else "🤖"):
+        st.markdown(message["content"])
 
-# Chat input box
-user_input = st.chat_input("Ask Arnav anything...")
-
-if user_input:
-    # Show user message
+# Chat input
+if user_input := st.chat_input("Ask Arnav anything..."):
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    
+    # Display user message
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
-
-    # Show assistant message
+    
+    # Get and display assistant response
     with st.chat_message("assistant", avatar="🤖"):
-        with st.spinner("Thinking..."):
-            # Get response without streaming
-            response = st.session_state.chat_chain({"question": user_input})
+        try:
+            llm, formatted_prompt = get_response(user_input, st.session_state.messages)
             
-            # Clean the response
-            cleaned_response = clean_response(response["answer"], user_input)
+            # Stream the response
+            response_container = st.empty()
+            full_response = ""
             
-            # Display cleaned response
-            st.markdown(cleaned_response)
+            # Stream tokens one by one
+            for chunk in llm.stream(formatted_prompt):
+                if hasattr(chunk, 'content'):
+                    token = chunk.content
+                else:
+                    token = str(chunk)
+                
+                full_response += token
+                
+                # Clean the response in real-time
+                cleaned_response = final_clean_response(full_response)
+                response_container.markdown(cleaned_response)
+            
+            # Final cleanup and add to chat history
+            final_response = final_clean_response(full_response)
+            st.session_state.messages.append({"role": "assistant", "content": final_response})
+            
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)}")
+            st.session_state.messages.append({"role": "assistant", "content": "Sorry, I encountered an error. Please try again."})
