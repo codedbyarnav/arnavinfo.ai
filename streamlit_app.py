@@ -11,11 +11,9 @@ from langchain_groq import ChatGroq
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.callbacks.manager import CallbackManager
 
-# Load environment variables
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# Page settings
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
@@ -73,7 +71,6 @@ def create_conversational_chain(callbacks=None):
     )
 
     memory = st.session_state.chat_memory
-
     callback_manager = CallbackManager(callbacks) if callbacks else CallbackManager([])
 
     llm = ChatGroq(
@@ -98,30 +95,38 @@ st.divider()
 if "chat_memory" not in st.session_state:
     st.session_state.chat_memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
+if "last_user_input" not in st.session_state:
+    st.session_state.last_user_input = None
+
 user_input = st.chat_input("Ask Arnav anything...")
 
+# If user inputs new question
 if user_input:
-    response_container = st.container()
+    st.session_state.last_user_input = user_input
 
+# Show chat history messages first, but skip the last user input (streamed separately)
+for message in st.session_state.chat_memory.chat_memory.messages:
+    # Do not render last user input here if streaming it live now
+    if st.session_state.last_user_input and message.content == st.session_state.last_user_input and message.type == "human":
+        continue
+    with st.chat_message("user" if message.type == "human" else "assistant",
+                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
+        st.markdown(message.content)
+
+# Stream response only for last user input
+if st.session_state.last_user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
-        st.markdown(user_input)
+        st.markdown(st.session_state.last_user_input)
 
     with st.chat_message("assistant", avatar="🤖"):
+        response_container = st.container()
         stream_handler = NoCompleteStreamHandler(response_container)
         chat_chain = create_conversational_chain(callbacks=[stream_handler])
+        response = chat_chain({"question": st.session_state.last_user_input})
 
-        response = chat_chain(
-            {"question": user_input}
-        )
-
-    # Add to chat memory after response
-    st.session_state.chat_memory.chat_memory.add_user_message(user_input)
+    # Add messages to memory after streaming finishes
+    st.session_state.chat_memory.chat_memory.add_user_message(st.session_state.last_user_input)
     st.session_state.chat_memory.chat_memory.add_ai_message(response["answer"])
 
-# Render chat history once
-for message in st.session_state.chat_memory.chat_memory.messages:
-    with st.chat_message(
-        "user" if message.type == "human" else "assistant",
-        avatar="🧑‍💻" if message.type == "human" else "🤖"
-    ):
-        st.markdown(message.content)
+    # Reset last user input so it does not stream again on rerun
+    st.session_state.last_user_input = None
