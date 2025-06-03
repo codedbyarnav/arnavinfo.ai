@@ -9,6 +9,7 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
 from langchain_groq import ChatGroq
 from langchain.callbacks.base import BaseCallbackHandler
+from langchain.callbacks.manager import CallbackManager  # <-- Import CallbackManager
 
 # Custom Streamlit callback handler to stream tokens live with no "Complete!" message
 class NoCompleteStreamHandler(BaseCallbackHandler):
@@ -59,19 +60,23 @@ Question:
 Answer as Arnav. Do NOT include the question in your answer. Provide only a direct and natural response:
 """
 
-
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-def get_conversational_chain():
+def get_conversational_chain(container):
+    # Create the stream handler with the current Streamlit container
+    stream_handler = NoCompleteStreamHandler(container)
+    callback_manager = CallbackManager([stream_handler])  # Wrap handler in a manager
+
     llm = ChatGroq(
-        model_name="llama3-70b-8192",
+        model_name="mixtral-8x7b-32768",  # Use a supported model here!
         temperature=0.3,
         streaming=True,
         api_key=GROQ_API_KEY,
+        callback_manager=callback_manager  # Attach callback manager here
     )
 
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
@@ -95,15 +100,9 @@ st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Load or create the chain
-if "chat_chain" not in st.session_state:
-    st.session_state.chat_chain = get_conversational_chain()
-
-# Display chat history
-for message in st.session_state.chat_chain.memory.chat_memory.messages:
-    with st.chat_message("user" if message.type == "human" else "assistant",
-                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
-        st.markdown(message.content)
+# Initialize chat history memory in session state if not present
+if "chat_memory" not in st.session_state:
+    st.session_state.chat_memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
 # Chat input box
 user_input = st.chat_input("Ask Arnav anything...")
@@ -115,8 +114,17 @@ if user_input:
 
     # Show assistant message with streaming
     with st.chat_message("assistant", avatar="🤖"):
-            stream_handler = NoCompleteStreamHandler(st.container())
-            st.session_state.chat_chain(
-            {"question": user_input},
-            callbacks=[stream_handler]
-        )
+        # Create chain with the current container for streaming callback
+        st.session_state.chat_chain = get_conversational_chain(st.container())
+        # Call the chain WITHOUT callbacks argument
+        response = st.session_state.chat_chain({"question": user_input})
+
+        # Update memory in session state
+        st.session_state.chat_memory.chat_memory.add_user_message(user_input)
+        st.session_state.chat_memory.chat_memory.add_ai_message(response["answer"])
+
+# Display chat history (after the new exchange)
+for message in st.session_state.chat_memory.chat_memory.messages:
+    with st.chat_message("user" if message.type == "human" else "assistant",
+                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
+        st.markdown(message.content)
