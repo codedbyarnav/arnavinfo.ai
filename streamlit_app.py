@@ -18,10 +18,8 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 # Page settings
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
-# Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
-# Custom Prompt Template
 PROMPT_TEMPLATE = """
 You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
 
@@ -49,7 +47,6 @@ Question:
 Answer as Arnav. Do NOT include the question in your answer. Provide only a direct and natural response:
 """
 
-# Streaming callback handler
 class NoCompleteStreamHandler(BaseCallbackHandler):
     def __init__(self, container):
         self.container = container
@@ -60,15 +57,13 @@ class NoCompleteStreamHandler(BaseCallbackHandler):
         self.text += token
         self.text_element.markdown(self.text)
 
-# Embeddings and vectorstore
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# Get conversational chain (without container, streaming container passed later)
-def get_conversational_chain():
+def create_conversational_chain(callbacks=None):
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
 
@@ -79,61 +74,51 @@ def get_conversational_chain():
 
     memory = st.session_state.chat_memory
 
+    callback_manager = CallbackManager(callbacks) if callbacks else CallbackManager([])
+
     llm = ChatGroq(
         temperature=0,
         model_name="llama3-70b-8192",
         api_key=GROQ_API_KEY,
-        streaming=True,
+        streaming=bool(callbacks),
+        callback_manager=callback_manager
     )
-
-    callback_manager = CallbackManager([])  # Will be set in streaming call
 
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vector_db.as_retriever(),
         memory=memory,
-        combine_docs_chain_kwargs={"prompt": prompt},
-        callback_manager=callback_manager,
+        combine_docs_chain_kwargs={"prompt": prompt}
     )
 
-# UI header
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Initialize memory and chain if not present
 if "chat_memory" not in st.session_state:
     st.session_state.chat_memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-if "chat_chain" not in st.session_state:
-    st.session_state.chat_chain = get_conversational_chain()
-
-# Get user input
 user_input = st.chat_input("Ask Arnav anything...")
 
 if user_input:
-    # Create container for streaming assistant message
     response_container = st.container()
 
+    with st.chat_message("user", avatar="🧑‍💻"):
+        st.markdown(user_input)
+
     with st.chat_message("assistant", avatar="🤖"):
-        # Use streaming handler with container for live token streaming
         stream_handler = NoCompleteStreamHandler(response_container)
-        callback_manager = CallbackManager([stream_handler])
+        chat_chain = create_conversational_chain(callbacks=[stream_handler])
 
-        # Update the llm's callback_manager before calling
-        st.session_state.chat_chain.llm.callback_manager = callback_manager
-
-        # Call chain with callbacks for streaming
-        response = st.session_state.chat_chain(
-            {"question": user_input},
-            callbacks=[stream_handler]
+        response = chat_chain(
+            {"question": user_input}
         )
 
-    # Add user and assistant messages to memory after response
+    # Add to chat memory after response
     st.session_state.chat_memory.chat_memory.add_user_message(user_input)
     st.session_state.chat_memory.chat_memory.add_ai_message(response["answer"])
 
-# Render entire chat history (user + assistant) once
+# Render chat history once
 for message in st.session_state.chat_memory.chat_memory.messages:
     with st.chat_message(
         "user" if message.type == "human" else "assistant",
