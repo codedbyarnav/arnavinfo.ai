@@ -89,23 +89,31 @@ if "chat_chain" not in st.session_state:
 
 user_input = st.chat_input("Ask Arnav anything...")
 
-if user_input:
-    with st.chat_message("user", avatar="🧑‍💻"):
-        st.markdown(user_input)
+if "last_user_message" not in st.session_state:
+    st.session_state.last_user_message = ""
 
+if user_input:
+    st.session_state.last_user_message = user_input
+
+if st.session_state.last_user_message:
+    # Show user message
+    with st.chat_message("user", avatar="🧑‍💻"):
+        st.markdown(st.session_state.last_user_message)
+
+    # Show assistant message with streaming
     with st.chat_message("assistant", avatar="🤖"):
-        # Create a fresh StreamHandler each time to reset the text buffer
-        stream_handler = StreamHandler(st.container())
-        # Run the chain with the streaming callback, passing fresh handler
+        stream_handler = NoCompleteStreamHandler(st.container())
         st.session_state.chat_chain(
-            {"question": user_input},
+            {"question": st.session_state.last_user_message},
             callbacks=[stream_handler]
         )
 
-# Render full chat history (this shows all past Q&A cleanly)
-for message in st.session_state.chat_memory.chat_memory.messages:
-    with st.chat_message(
-        "user" if message.type == "human" else "assistant",
-        avatar="🧑‍💻" if message.type == "human" else "🤖"
-    ):
+    st.session_state.last_user_message = ""
+
+
+messages = st.session_state.chat_memory.chat_memory.messages
+
+for message in messages[:-2]:
+    with st.chat_message("user" if message.type == "human" else "assistant",
+                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
         st.markdown(message.content)
