@@ -1,4 +1,5 @@
 import streamlit as st
+import asyncio
 from langchain_community.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
@@ -29,9 +30,9 @@ embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-
 
 # Initialize Groq chat model with streaming enabled
 llm = ChatGroq(
-    groq_api_key=st.secrets["GROQ_API_KEY"],  # or use environment variable
+    groq_api_key=st.secrets["GROQ_API_KEY"],
     model_name="llama3-8b-8192",
-    streaming=True
+    streaming=True,
 )
 
 # Setup conversation memory
@@ -41,7 +42,7 @@ memory = ConversationBufferMemory(memory_key="chat_history", return_messages=Tru
 chain = ConversationalRetrievalChain.from_llm(
     llm=llm,
     retriever=vectorstore.as_retriever(),
-    memory=memory
+    memory=memory,
 )
 
 # Streamlit UI
@@ -53,24 +54,22 @@ if "chat_history" not in st.session_state:
 
 user_input = st.chat_input("Ask me anything about your college...")
 
+async def run_chain(question):
+    container = st.empty()
+    stream_handler = StreamlitCallbackHandler(container)
+    result = await chain.acall({"question": question}, callbacks=[stream_handler])
+    return result["answer"]
+
 if user_input:
-    # Show user message
+    # Show user message immediately
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # Show assistant response with streaming
-    with st.chat_message("assistant"):
-        container = st.empty()
-        stream_handler = StreamlitCallbackHandler(container)
+    # Run the chain asynchronously and get the answer with streaming
+    answer = asyncio.run(run_chain(user_input))
 
-        # Run chain with streaming callbacks
-        result = chain.invoke(
-            {"question": user_input},
-            callbacks=[stream_handler]
-        )
-
-    # Save the conversation
-    st.session_state.chat_history.append((user_input, result["answer"]))
+    # Save conversation
+    st.session_state.chat_history.append((user_input, answer))
 
 # Display full chat history
 for question, answer in st.session_state.chat_history:
