@@ -114,9 +114,12 @@ if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-    with st.chat_message("assistant", avatar="🤖") as container:
-        st.session_state.chat_chain = get_conversational_chain(container)
+    response_container = st.container()  # Create a separate container for streaming output
+    
+    with st.chat_message("assistant", avatar="🤖"):
+        st.session_state.chat_chain = get_conversational_chain(response_container)
         _ = st.session_state.chat_chain({"question": user_input})
+
 
 # Display chat history
 for message in st.session_state.chat_memory.chat_memory.messages:
