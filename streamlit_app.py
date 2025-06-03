@@ -109,8 +109,8 @@ if user_input:
 
     # Show assistant message with streaming
     with st.chat_message("assistant", avatar="🤖"):
-    stream_handler = NoCompleteStreamHandler(st.container())
-    st.session_state.chat_chain.invoke(
+        stream_handler = NoCompleteStreamHandler(st.container())
+        st.session_state.chat_chain.invoke(
         {"question": user_input},
         callbacks=[stream_handler]
     )
