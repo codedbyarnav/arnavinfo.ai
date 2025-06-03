@@ -72,11 +72,10 @@ def get_conversational_chain(container):
     callback_manager = CallbackManager([stream_handler])  # Wrap handler in a manager
 
     llm = ChatGroq(
-        model_name="gemma-7b-it",  # ✅ valid model name
-        temperature=0.3,
-        streaming=True,
-        api_key=GROQ_API_KEY,
-        callback_manager=callback_manager
+        temperature=0,
+        model_name="llama3-70b-8192",  # ✅ Correct model name
+        api_key=os.environ["GROQ_API_KEY"],  # Ensure this is set correctly
+        streaming=True,  # If using stream
     )
 
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
