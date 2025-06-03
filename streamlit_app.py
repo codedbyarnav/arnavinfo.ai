@@ -113,13 +113,10 @@ if "chat_chain" not in st.session_state:
 user_input = st.chat_input("Ask Arnav anything...")
 
 if user_input:
-    # Show user input
-    with st.chat_message("user", avatar="🧑‍💻"):
-        st.markdown(user_input)
-
-    # Show streamed assistant response
+    # Stream assistant response only (don't manually show user input)
     with st.chat_message("assistant", avatar="🤖"):
         response = st.session_state.chat_chain({"question": user_input})
+
 
 # Render full chat history (only once)
 for message in st.session_state.chat_memory.chat_memory.messages:
