@@ -95,38 +95,25 @@ st.divider()
 if "chat_memory" not in st.session_state:
     st.session_state.chat_memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-if "last_user_input" not in st.session_state:
-    st.session_state.last_user_input = None
-
 user_input = st.chat_input("Ask Arnav anything...")
 
-# If user inputs new question
-if user_input:
-    st.session_state.last_user_input = user_input
+# Initialize chat chain once for reuse
+if "chat_chain" not in st.session_state:
+    st.session_state.chat_chain = create_conversational_chain()
 
-# Show chat history messages first, but skip the last user input (streamed separately)
+# Render all previous messages from memory
 for message in st.session_state.chat_memory.chat_memory.messages:
-    # Do not render last user input here if streaming it live now
-    if st.session_state.last_user_input and message.content == st.session_state.last_user_input and message.type == "human":
-        continue
     with st.chat_message("user" if message.type == "human" else "assistant",
                          avatar="🧑‍💻" if message.type == "human" else "🤖"):
         st.markdown(message.content)
 
-# Stream response only for last user input
-if st.session_state.last_user_input:
+# When user inputs something
+if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
-        st.markdown(st.session_state.last_user_input)
+        st.markdown(user_input)
 
     with st.chat_message("assistant", avatar="🤖"):
-        response_container = st.container()
-        stream_handler = NoCompleteStreamHandler(response_container)
-        chat_chain = create_conversational_chain(callbacks=[stream_handler])
-        response = chat_chain({"question": st.session_state.last_user_input})
-
-    # Add messages to memory after streaming finishes
-    st.session_state.chat_memory.chat_memory.add_user_message(st.session_state.last_user_input)
-    st.session_state.chat_memory.chat_memory.add_ai_message(response["answer"])
-
-    # Reset last user input so it does not stream again on rerun
-    st.session_state.last_user_input = None
+        container = st.container()
+        stream_handler = NoCompleteStreamHandler(container)
+        # Call chain with streaming callback (updates UI token by token)
+        response = st.session_state.chat_chain({"question": user_input}, callbacks=[stream_handler])
