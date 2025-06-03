@@ -1,80 +1,75 @@
+import os
 import streamlit as st
-import asyncio
-from langchain_community.vectorstores import FAISS
+from dotenv import load_dotenv
+from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
+from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferMemory
-from langchain_groq import ChatGroq
-from langchain.callbacks.base import BaseCallbackHandler
-import pickle
+from langchain_community.chat_models import ChatGroq
+from langchain.chains.llm import LLMChain
+from langchain.chains.combine_documents import StuffDocumentsChain
 
-# Custom Streamlit callback handler for streaming tokens
-class StreamlitCallbackHandler(BaseCallbackHandler):
-    def __init__(self, container):
-        self.container = container
-        self.text = ""
+load_dotenv()
 
-    def on_llm_new_token(self, token: str, **kwargs) -> None:
-        self.text += token
-        self.container.markdown(self.text + "▌")  # Show typing cursor
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-    def on_llm_end(self, *args, **kwargs) -> None:
-        self.container.markdown(self.text)  # Final output
+DB_FAISS_PATH = "vectorstore/db_faiss"
 
-# Load your vectorstore
-with open("vectorstore/index.pkl", "rb") as f:
-    vectorstore = pickle.load(f)
+PROMPT_TEMPLATE = """
+Use the following pieces of context to answer the question at the end.
+If you don't know the answer, just say you don't know. DO NOT make up an answer.
 
+{context}
 
-# Initialize embeddings (match your vectorstore embeddings)
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+Question: {question}
 
-# Initialize Groq chat model with streaming enabled
-llm = ChatGroq(
-    groq_api_key=st.secrets["GROQ_API_KEY"],
-    model_name="llama3-8b-8192",
-    streaming=True,
-)
+Helpful Answer:
+"""
 
-# Setup conversation memory
-memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+def load_vector_store():
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    return FAISS.load_local(DB_FAISS_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# Setup Conversational Retrieval Chain
-chain = ConversationalRetrievalChain.from_llm(
-    llm=llm,
-    retriever=vectorstore.as_retriever(),
-    memory=memory,
-)
+def get_conversational_chain(vector_db):
+    prompt = PromptTemplate(
+        input_variables=["context", "question"],
+        template=PROMPT_TEMPLATE,
+    )
 
-# Streamlit UI
-st.set_page_config(page_title="CampusAI", page_icon="🎓")
-st.title("🎓 CampusAI - Ask about your college!")
+    llm = ChatGroq(
+        model_name="llama3-70b-8192",
+        temperature=0.3,
+        streaming=False,  # ❗ must be False with LangChain chains
+        api_key=GROQ_API_KEY,
+    )
 
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    llm_chain = LLMChain(llm=llm, prompt=prompt)
+    stuff_chain = StuffDocumentsChain(llm_chain=llm_chain, document_variable_name="context")
 
-user_input = st.chat_input("Ask me anything about your college...")
+    return ConversationalRetrievalChain(
+        retriever=vector_db.as_retriever(),
+        combine_docs_chain=stuff_chain,
+        memory=memory,
+    )
 
-async def run_chain(question):
-    container = st.empty()
-    stream_handler = StreamlitCallbackHandler(container)
-    result = await chain.acall({"question": question}, callbacks=[stream_handler])
-    return result["answer"]
+def main():
+    st.set_page_config(page_title="CampusAI Chatbot", page_icon="🤖")
+    st.header("Ask about DSEU 📚")
 
-if user_input:
-    # Show user message immediately
-    with st.chat_message("user"):
-        st.markdown(user_input)
+    user_input = st.text_input("Ask a question about your college:")
 
-    # Run the chain asynchronously and get the answer with streaming
-    answer = asyncio.run(run_chain(user_input))
+    if user_input:
+        vector_db = load_vector_store()
+        if "chat_chain" not in st.session_state:
+            st.session_state.chat_chain = get_conversational_chain(vector_db)
 
-    # Save conversation
-    st.session_state.chat_history.append((user_input, answer))
+        response = st.session_state.chat_chain(
+            {"question": user_input}
+        )
 
-# Display full chat history
-for question, answer in st.session_state.chat_history:
-    with st.chat_message("user"):
-        st.markdown(question)
-    with st.chat_message("assistant"):
-        st.markdown(answer)
+        st.write(response["answer"])
+
+if __name__ == "__main__":
+    main()
