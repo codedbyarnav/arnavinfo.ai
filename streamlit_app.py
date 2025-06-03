@@ -89,21 +89,31 @@ def get_conversational_chain(callback_manager):
         combine_docs_chain_kwargs={"prompt": prompt}
     )
 
+# Page UI
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
+# Session memory setup
 if "chat_memory" not in st.session_state:
     st.session_state.chat_memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
 if "last_user_message" not in st.session_state:
     st.session_state.last_user_message = ""
 
+# Handle user input
 user_input = st.chat_input("Ask Arnav anything...")
-
 if user_input:
     st.session_state.last_user_message = user_input
 
+# Show all previous messages (in proper order)
+messages = st.session_state.chat_memory.chat_memory.messages
+for message in messages:
+    with st.chat_message("user" if message.type == "human" else "assistant",
+                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
+        st.markdown(message.content)
+
+# Handle current input
 if st.session_state.last_user_message:
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(st.session_state.last_user_message)
@@ -113,16 +123,7 @@ if st.session_state.last_user_message:
         stream_handler = NoCompleteStreamHandler(container)
         callback_manager = CallbackManager([stream_handler])
 
-        # Create a fresh chat_chain per input, with callback_manager injected
         chat_chain = get_conversational_chain(callback_manager)
-
         chat_chain({"question": st.session_state.last_user_message})
 
     st.session_state.last_user_message = ""
-
-# Show all previous messages (except the last two already shown)
-messages = st.session_state.chat_memory.chat_memory.messages
-for message in messages[:-2]:
-    with st.chat_message("user" if message.type == "human" else "assistant",
-                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
-        st.markdown(message.content)
