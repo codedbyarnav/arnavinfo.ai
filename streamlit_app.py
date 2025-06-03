@@ -22,12 +22,6 @@ class NoCompleteStreamHandler(BaseCallbackHandler):
         self.text += token
         self.text_element.markdown(self.text)
 
-# Optional: Fallback sanitizer to trim repeated question from LLM output
-def sanitize_response(response: str, question: str) -> str:
-    if response.strip().lower().startswith(question.strip().lower()):
-        return response[len(question):].lstrip(": ").capitalize()
-    return response
-
 # Load environment variables
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -38,7 +32,7 @@ st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 # Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
-# Custom Prompt (with better structure and clarity)
+# Custom Prompt (NO question repetition in answers)
 PROMPT_TEMPLATE = """
 You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
 
@@ -50,14 +44,10 @@ Important:
 - NEVER repeat, rephrase, or restate the user's question anywhere in your response.
 - Answer directly and naturally like Arnav would.
 
-Examples:
+Example:
 User question: What is your name?
 Good answer: I'm Arnav Atri!
 Bad answer: You asked what my name is. I'm Arnav Atri.
-
-User question: What are your hobbies?
-Good answer: I really enjoy coding and exploring tech. Lately, I’ve been focusing on AI, automation, and building useful tools.
-Bad answer: What are your hobbies? I really enjoy coding...
 
 ---
 
@@ -67,28 +57,23 @@ Context:
 Question:
 {question}
 
----
+Answer as Arnav. Do NOT include the question in your answer. Provide only a direct and natural response:
+"""
 
-Answer as Arnav (do NOT include or paraphrase the question):
-""".strip()
 
-# Load Hugging Face embeddings
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-# Load FAISS vectorstore
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# Set up LangChain conversation chain
 def get_conversational_chain():
     llm = ChatGroq(
-    model_name="mixtral-8x7b-32768",
-    temperature=0.3,
-    streaming=True,
-    api_key=GROQ_API_KEY,
-)
-
+        model_name="llama3-70b-8192",
+        temperature=0.3,
+        streaming=True,
+        api_key=GROQ_API_KEY,
+    )
 
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     embeddings = load_embeddings()
