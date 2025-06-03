@@ -117,12 +117,14 @@ if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-    # Show streamed assistant response
+    # Stream assistant response
     with st.chat_message("assistant", avatar="🤖"):
-        response = st.session_state.chat_chain({"question": user_input})
+        _ = st.session_state.chat_chain({"question": user_input})
 
+    # Avoid double display of response
+    st.stop()
 
-# Render full chat history (only once)
+# Render chat history (only when not responding live)
 for message in st.session_state.chat_memory.chat_memory.messages:
     with st.chat_message("user" if message.type == "human" else "assistant",
                          avatar="🧑‍💻" if message.type == "human" else "🤖"):
