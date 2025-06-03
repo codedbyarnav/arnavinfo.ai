@@ -89,31 +89,28 @@ def get_conversational_chain(callback_manager):
         combine_docs_chain_kwargs={"prompt": prompt}
     )
 
-# Page UI
+# App UI
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Session memory setup
+# Initialize memory
 if "chat_memory" not in st.session_state:
     st.session_state.chat_memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
 if "last_user_message" not in st.session_state:
     st.session_state.last_user_message = ""
 
-# Handle user input
+# Save previous messages (for reverse display)
+previous_messages = st.session_state.chat_memory.chat_memory.messages.copy()
+
+# User input box
 user_input = st.chat_input("Ask Arnav anything...")
+
+# Handle new user input
 if user_input:
     st.session_state.last_user_message = user_input
 
-# Show all previous messages (in proper order)
-messages = st.session_state.chat_memory.chat_memory.messages
-for message in messages:
-    with st.chat_message("user" if message.type == "human" else "assistant",
-                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
-        st.markdown(message.content)
-
-# Handle current input
 if st.session_state.last_user_message:
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(st.session_state.last_user_message)
@@ -127,3 +124,9 @@ if st.session_state.last_user_message:
         chat_chain({"question": st.session_state.last_user_message})
 
     st.session_state.last_user_message = ""
+
+# Show previous messages in reverse order (latest on top)
+for message in reversed(previous_messages):
+    with st.chat_message("user" if message.type == "human" else "assistant",
+                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
+        st.markdown(message.content)
