@@ -18,10 +18,8 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 # Page settings
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
-# Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
-# Custom Prompt Template
 PROMPT_TEMPLATE = """
 You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
 
@@ -50,7 +48,7 @@ Answer as Arnav. Do NOT include the question in your answer. Provide only a dire
 """
 
 # Streaming callback handler
-class NoCompleteStreamHandler(BaseCallbackHandler):
+class StreamHandler(BaseCallbackHandler):
     def __init__(self, container):
         self.container = container
         self.text_element = container.empty()
@@ -60,24 +58,22 @@ class NoCompleteStreamHandler(BaseCallbackHandler):
         self.text += token
         self.text_element.markdown(self.text)
 
-# Embeddings and vectorstore
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# Get conversational chain
-def get_conversational_chain():
+def get_chain():
+    embeddings = load_embeddings()
+    vector_db = load_vectorstore(embeddings)
+
     llm = ChatGroq(
         temperature=0,
         model_name="llama3-70b-8192",
         api_key=GROQ_API_KEY,
         streaming=True,
     )
-
-    embeddings = load_embeddings()
-    vector_db = load_vectorstore(embeddings)
 
     prompt = PromptTemplate(
         input_variables=["context", "question"],
@@ -98,15 +94,14 @@ st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Initialize memory if needed
+# Initialize session state
 if "chat_memory" not in st.session_state:
     st.session_state.chat_memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-# Initialize chat chain once
 if "chat_chain" not in st.session_state:
-    st.session_state.chat_chain = get_conversational_chain()
+    st.session_state.chat_chain = get_chain()
 
-# Get user input
+# User input
 user_input = st.chat_input("Ask Arnav anything...")
 
 if user_input:
@@ -114,23 +109,17 @@ if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-    # Show assistant message with streaming
+    # Show assistant response with streaming
     with st.chat_message("assistant", avatar="🤖"):
-        container = st.container()
-        stream_handler = NoCompleteStreamHandler(container)
-
-        # Run the chain with the streaming callback
-        _ = st.session_state.chat_chain(
+        stream_handler = StreamHandler(st.container())
+        # Run chain with streaming callback to display token by token
+        st.session_state.chat_chain(
             {"question": user_input},
             callbacks=[stream_handler]
         )
 
-    # Save the full assistant response to chat memory so it persists on rerun
-    st.session_state.chat_memory.chat_memory.add_ai_message(stream_handler.text)
-
-# Render full chat history (user and assistant)
+# Render full chat history after current message to avoid duplication
 for message in st.session_state.chat_memory.chat_memory.messages:
-    is_user = message.type == "human"
-    with st.chat_message("user" if is_user else "assistant",
-                         avatar="🧑‍💻" if is_user else "🤖"):
+    with st.chat_message("user" if message.type == "human" else "assistant",
+                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
         st.markdown(message.content)
