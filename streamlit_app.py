@@ -1,5 +1,6 @@
-
 import os
+import json
+from datetime import datetime
 from dotenv import load_dotenv
 import streamlit as st
 
@@ -21,6 +22,16 @@ class NoCompleteStreamHandler(BaseCallbackHandler):
     def on_llm_new_token(self, token: str, **kwargs):
         self.text += token
         self.text_element.markdown(self.text)
+
+# 🔹 Function to save chat logs to a file
+def save_chat_log(user_input, bot_output):
+    log = {
+        "timestamp": datetime.now().isoformat(),
+        "user": user_input,
+        "bot": bot_output
+    }
+    with open("chat_logs.json", "a") as f:
+        f.write(json.dumps(log) + "\n")
 
 # Load environment variables
 load_dotenv()
@@ -60,13 +71,15 @@ Question:
 Answer as Arnav. Do NOT include the question in your answer. Provide only a direct and natural response:
 """
 
-
+# Load embedding model
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
+# Load FAISS vector store
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
+# Load conversational chain
 def get_conversational_chain():
     llm = ChatGroq(
         model_name="llama3-70b-8192",
@@ -121,3 +134,6 @@ if user_input:
             {"question": user_input},
             callbacks=[stream_handler]
         )
+
+        # ✅ Save chat to log file
+        save_chat_log(user_input, stream_handler.text)
