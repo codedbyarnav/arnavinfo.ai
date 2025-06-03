@@ -145,7 +145,7 @@ def load_vectorstore():
 
 def get_chat_chain():
     llm = ChatGroq(
-        model_name="llama-3.1-70b-versatile",
+        model_name="llama3-70b-8192",
         temperature=0.3,
         streaming=True,
         api_key=GROQ_API_KEY,
