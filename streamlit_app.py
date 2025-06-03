@@ -1,4 +1,3 @@
-
 import os
 from dotenv import load_dotenv
 import streamlit as st
@@ -116,8 +115,8 @@ if user_input:
 
     # Show assistant message with streaming
     with st.chat_message("assistant", avatar="🤖"):
-        stream_handler = NoCompleteStreamHandler(st.container())
-        st.session_state.chat_chain(
+            stream_handler = NoCompleteStreamHandler(st.container())
+            st.session_state.chat_chain(
             {"question": user_input},
             callbacks=[stream_handler]
         )
