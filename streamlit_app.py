@@ -82,12 +82,13 @@ def get_conversational_chain():
         template=PROMPT_TEMPLATE
     )
 
-    return ConversationalRetrievalChain(
+    return ConversationalRetrievalChain.from_llm(
+        llm=llm,
         retriever=vector_db.as_retriever(),
         memory=memory,
         combine_docs_chain_kwargs={"prompt": prompt},
-        question_generator=None,  # disables question rephrasing
-        llm=llm,
+        # Disables rephrasing, avoids bad "There is no question..." responses
+        question_generator=None
     )
 
 # Streamlit UI
