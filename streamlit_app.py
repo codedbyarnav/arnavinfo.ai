@@ -8,24 +8,71 @@ from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
 from langchain_groq import ChatGroq
-from langchain.callbacks.base import BaseCallbackHandler
 
-# Custom Streamlit callback handler to stream tokens live with no "Complete!" message
-class NoCompleteStreamHandler(BaseCallbackHandler):
-    def __init__(self, container):
-        self.container = container
-        self.text_element = container.empty()
-        self.text = ""
-
-    def on_llm_new_token(self, token: str, **kwargs):
-        self.text += token
-        self.text_element.markdown(self.text)
-
-# Optional: Fallback sanitizer to trim repeated question from LLM output
-def sanitize_response(response: str, question: str) -> str:
-    if response.strip().lower().startswith(question.strip().lower()):
-        return response[len(question):].lstrip(": ").capitalize()
-    return response
+# Comprehensive response cleaner
+def clean_response(response: str, original_question: str = "") -> str:
+    """Remove question repetition and reformulation from response"""
+    
+    # Remove common question reformulation patterns
+    patterns_to_remove = [
+        "Here is the rephrased standalone question:",
+        "Here's the rephrased question:",
+        "Rephrased question:",
+        "The question is:",
+        "Question:",
+        "Here is the answer:",
+        "Answer:",
+    ]
+    
+    for pattern in patterns_to_remove:
+        if pattern in response:
+            response = response.split(pattern)[-1]
+    
+    # Split by lines and find where the actual answer starts
+    lines = response.split('\n')
+    cleaned_lines = []
+    answer_started = False
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            if answer_started:
+                cleaned_lines.append("")
+            continue
+        
+        # Skip lines that look like question repetition
+        if (line.lower().startswith(('tell me', 'what is', 'what are', 'how', 'when', 'where', 'why', 'can you')) 
+            and not answer_started):
+            continue
+            
+        # Look for the start of actual answer
+        if (line.lower().startswith(('i\'m arnav', 'my name is', 'i am arnav', 'hello', 'hi there', 'i\'m ', 'i am ')) 
+            or 'arnav atri' in line.lower() 
+            or any(phrase in line.lower() for phrase in ['i really', 'i love', 'i work', 'i study', 'i enjoy'])):
+            answer_started = True
+            cleaned_lines.append(line)
+        elif answer_started:
+            cleaned_lines.append(line)
+        elif not any(char in line for char in '?'):  # If no question mark, might be answer
+            answer_started = True
+            cleaned_lines.append(line)
+    
+    # Join the cleaned lines
+    result = '\n'.join(cleaned_lines).strip()
+    
+    # If we didn't find a clear answer start, return everything after first few lines
+    if not result or len(result) < 20:
+        lines = response.split('\n')
+        # Skip first 1-2 lines if they look like questions
+        start_idx = 0
+        for i, line in enumerate(lines[:3]):
+            if line.strip() and ('?' in line or any(q in line.lower() for q in ['tell me', 'what is', 'what are'])):
+                start_idx = i + 1
+            else:
+                break
+        result = '\n'.join(lines[start_idx:]).strip()
+    
+    return result if result else response
 
 # Load environment variables
 load_dotenv()
@@ -37,39 +84,21 @@ st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 # Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
-# Custom Prompt (with better structure and clarity)
+# Improved Custom Prompt with stronger instructions
 PROMPT_TEMPLATE = """
-You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
+You are Arnav Atri speaking directly. Answer naturally as yourself.
 
-Only use the provided information to answer. Do not mention that you are an AI or that your answers come from a context or dataset.
-If you're unsure of something, say "I'm not sure about that yet, but happy to chat more!"
-If the user greets you, greet them back warmly.
+STRICT RULES:
+1. DO NOT repeat the user's question
+2. DO NOT say "Here is the rephrased question" or similar
+3. DO NOT reformulate or rephrase the question
+4. Start immediately with your answer as Arnav
+5. Be conversational and personal
 
-Important:
-- NEVER repeat, rephrase, or restate the user's question anywhere in your response.
-- Answer directly and naturally like Arnav would.
+Context: {context}
+User: {question}
 
-Examples:
-User question: What is your name?
-Good answer: I'm Arnav Atri!
-Bad answer: You asked what my name is. I'm Arnav Atri.
-
-User question: What are your hobbies?
-Good answer: I really enjoy coding and exploring tech. Lately, I’ve been focusing on AI, automation, and building useful tools.
-Bad answer: What are your hobbies? I really enjoy coding...
-
----
-
-Context:
-{context}
-
-Question:
-{question}
-
----
-
-Answer as Arnav (do NOT include or paraphrase the question):
-""".strip()
+Arnav:""".strip()
 
 # Load Hugging Face embeddings
 def load_embeddings():
@@ -82,12 +111,11 @@ def load_vectorstore(embeddings):
 # Set up LangChain conversation chain
 def get_conversational_chain():
     llm = ChatGroq(
-    model_name="mixtral-8x7b-32768",
-    temperature=0.3,
-    streaming=True,
-    api_key=GROQ_API_KEY,
-)
-
+        model_name="mixtral-8x7b-32768",
+        temperature=0.3,
+        streaming=False,  # Disable streaming for clean post-processing
+        api_key=GROQ_API_KEY,
+    )
 
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     embeddings = load_embeddings()
@@ -128,10 +156,14 @@ if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-    # Show assistant message with streaming
+    # Show assistant message
     with st.chat_message("assistant", avatar="🤖"):
-        stream_handler = NoCompleteStreamHandler(st.container())
-        st.session_state.chat_chain(
-            {"question": user_input},
-            callbacks=[stream_handler]
-        )
+        with st.spinner("Thinking..."):
+            # Get response without streaming
+            response = st.session_state.chat_chain({"question": user_input})
+            
+            # Clean the response
+            cleaned_response = clean_response(response["answer"], user_input)
+            
+            # Display cleaned response
+            st.markdown(cleaned_response)
