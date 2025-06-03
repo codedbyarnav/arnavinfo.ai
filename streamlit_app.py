@@ -14,7 +14,8 @@ load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-DB_FAISS_PATH = "vectorstore/db_faiss"
+# Make sure this path matches where your FAISS index is stored
+DB_FAISS_PATH = "vectorstore"  # <- change this if needed, it should be the folder with index.faiss and other files
 
 PROMPT_TEMPLATE = """
 Use the following pieces of context to answer the question at the end.
@@ -29,6 +30,7 @@ Helpful Answer:
 
 def load_vector_store():
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    # This loads from folder containing FAISS files, not a pickle
     return FAISS.load_local(DB_FAISS_PATH, embeddings, allow_dangerous_deserialization=True)
 
 def get_conversational_chain(vector_db):
@@ -40,8 +42,8 @@ def get_conversational_chain(vector_db):
     llm = ChatGroq(
         model_name="llama3-70b-8192",
         temperature=0.3,
-        streaming=False,  # ❗ must be False with LangChain chains
-        api_key=GROQ_API_KEY,
+        streaming=False,  # streaming must be False for LangChain chains
+        groq_api_key=GROQ_API_KEY,  # <-- use groq_api_key, not api_key
     )
 
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
