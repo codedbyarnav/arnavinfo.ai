@@ -1,68 +1,80 @@
-# streamlit_app.py
-
 import streamlit as st
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
-from langchain_groq import ChatGroq
 from langchain.chains import ConversationalRetrievalChain
-from langchain.prompts import ChatPromptTemplate
-from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from langchain.callbacks.base import BaseCallbackHandler
-from langchain.schema import HumanMessage
 from langchain.memory import ConversationBufferMemory
-from langchain_core.callbacks import StreamHandler
+from langchain_groq import ChatGroq
+from langchain.callbacks.base import BaseCallbackHandler
+import pickle
 
-# Load FAISS index
-db = FAISS.load_local("faiss_index", HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"), allow_dangerous_deserialization=True)
-retriever = db.as_retriever()
+# Custom Streamlit callback handler for streaming tokens
+class StreamlitCallbackHandler(BaseCallbackHandler):
+    def __init__(self, container):
+        self.container = container
+        self.text = ""
 
-# Setup prompt template
-prompt = ChatPromptTemplate.from_template(
-    """Answer the question using only the following context. If you don't know, say you don't know. Don't make up anything.
+    def on_llm_new_token(self, token: str, **kwargs) -> None:
+        self.text += token
+        self.container.markdown(self.text + "▌")  # Show typing cursor
 
-    Context:
-    {context}
+    def on_llm_end(self, *args, **kwargs) -> None:
+        self.container.markdown(self.text)  # Final output
 
-    Question:
-    {question}
-    """
-)
+# Load your vectorstore
+with open("vectorstore.pkl", "rb") as f:
+    vectorstore = pickle.load(f)
 
-# Groq LLM setup with streaming
+# Initialize embeddings (match your vectorstore embeddings)
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+# Initialize Groq chat model with streaming enabled
 llm = ChatGroq(
-    model="mixtral-8x7b-32768",  # or llama3-8b
-    temperature=0.2,
+    groq_api_key=st.secrets["GROQ_API_KEY"],  # or use environment variable
+    model_name="llama3-8b-8192",
     streaming=True
 )
 
-# Chain memory
+# Setup conversation memory
 memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-# Chain for RAG + Chat
+# Setup Conversational Retrieval Chain
 chain = ConversationalRetrievalChain.from_llm(
     llm=llm,
-    retriever=retriever,
-    memory=memory,
-    combine_docs_chain_kwargs={"prompt": prompt}
+    retriever=vectorstore.as_retriever(),
+    memory=memory
 )
 
 # Streamlit UI
-st.title("Campus AI Chatbot 🤖")
-st.markdown("Ask questions based on DSEU information.")
+st.set_page_config(page_title="CampusAI", page_icon="🎓")
+st.title("🎓 CampusAI - Ask about your college!")
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-user_input = st.chat_input("Ask me anything...")
+user_input = st.chat_input("Ask me anything about your college...")
 
 if user_input:
+    # Show user message
     with st.chat_message("user"):
         st.markdown(user_input)
 
+    # Show assistant response with streaming
     with st.chat_message("assistant"):
-        stream_handler = StreamHandler(st.empty())
-        response = chain.invoke(
+        container = st.empty()
+        stream_handler = StreamlitCallbackHandler(container)
+
+        # Run chain with streaming callbacks
+        result = chain.invoke(
             {"question": user_input},
             callbacks=[stream_handler]
         )
-        st.session_state.chat_history.append((user_input, response["answer"]))
+
+    # Save the conversation
+    st.session_state.chat_history.append((user_input, result["answer"]))
+
+# Display full chat history
+for question, answer in st.session_state.chat_history:
+    with st.chat_message("user"):
+        st.markdown(question)
+    with st.chat_message("assistant"):
+        st.markdown(answer)
