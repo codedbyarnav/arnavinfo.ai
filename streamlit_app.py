@@ -9,13 +9,11 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
 from langchain_groq import ChatGroq
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain.callbacks.manager import CallbackManager
 
 # Load environment variables
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# Page settings
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
@@ -47,12 +45,11 @@ Question:
 Answer as Arnav. Do NOT include the question in your answer. Provide only a direct and natural response:
 """
 
-# Streaming callback handler
 class StreamHandler(BaseCallbackHandler):
     def __init__(self, container):
         self.container = container
         self.text_element = container.empty()
-        self.text = ""
+        self.text = ""  # Important: reset text per instance
 
     def on_llm_new_token(self, token: str, **kwargs):
         self.text += token
@@ -89,37 +86,35 @@ def get_chain():
         combine_docs_chain_kwargs={"prompt": prompt}
     )
 
-# UI header
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Initialize session state
 if "chat_memory" not in st.session_state:
     st.session_state.chat_memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
 if "chat_chain" not in st.session_state:
     st.session_state.chat_chain = get_chain()
 
-# User input
 user_input = st.chat_input("Ask Arnav anything...")
 
 if user_input:
-    # Show user message
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-    # Show assistant response with streaming
     with st.chat_message("assistant", avatar="🤖"):
+        # Create a fresh StreamHandler each time to reset the text buffer
         stream_handler = StreamHandler(st.container())
-        # Run chain with streaming callback to display token by token
+        # Run the chain with the streaming callback, passing fresh handler
         st.session_state.chat_chain(
             {"question": user_input},
             callbacks=[stream_handler]
         )
 
-# Render full chat history after current message to avoid duplication
+# Render full chat history (this shows all past Q&A cleanly)
 for message in st.session_state.chat_memory.chat_memory.messages:
-    with st.chat_message("user" if message.type == "human" else "assistant",
-                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
+    with st.chat_message(
+        "user" if message.type == "human" else "assistant",
+        avatar="🧑‍💻" if message.type == "human" else "🤖"
+    ):
         st.markdown(message.content)
