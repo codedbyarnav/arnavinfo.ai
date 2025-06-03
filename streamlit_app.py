@@ -1,116 +1,68 @@
-import os
-from dotenv import load_dotenv
+# streamlit_app.py
+
 import streamlit as st
-
-from langchain_community.vectorstores import FAISS
-from langchain.memory import ConversationBufferMemory
+from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.prompts import PromptTemplate
-from langchain.chains import ConversationalRetrievalChain
 from langchain_groq import ChatGroq
+from langchain.chains import ConversationalRetrievalChain
+from langchain.prompts import ChatPromptTemplate
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.callbacks.base import BaseCallbackHandler
+from langchain.schema import HumanMessage
+from langchain.memory import ConversationBufferMemory
+from langchain_core.callbacks import StreamHandler
 
-# Custom Streamlit callback handler to stream tokens live with no "Complete!" message
-class NoCompleteStreamHandler(BaseCallbackHandler):
-    def __init__(self, container):
-        self.container = container
-        self.text_element = container.empty()
-        self.text = ""
+# Load FAISS index
+db = FAISS.load_local("faiss_index", HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"), allow_dangerous_deserialization=True)
+retriever = db.as_retriever()
 
-    def on_llm_new_token(self, token: str, **kwargs):
-        self.text += token
-        self.text_element.markdown(self.text)
+# Setup prompt template
+prompt = ChatPromptTemplate.from_template(
+    """Answer the question using only the following context. If you don't know, say you don't know. Don't make up anything.
 
-# Load environment variables
-load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    Context:
+    {context}
 
-# Page settings
-st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
+    Question:
+    {question}
+    """
+)
 
-# Constants
-VECTOR_STORE_PATH = "vectorstore/db_faiss"
+# Groq LLM setup with streaming
+llm = ChatGroq(
+    model="mixtral-8x7b-32768",  # or llama3-8b
+    temperature=0.2,
+    streaming=True
+)
 
-# Custom Prompt (NO question repetition in answers)
-PROMPT_TEMPLATE = """
-You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
+# Chain memory
+memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-Only use the provided information to answer. Do not mention that you are an AI or that your answers come from a context or dataset.
-If you're unsure of something, say "I'm not sure about that yet, but happy to chat more!"
-If user greets you, greet them back warmly.
-Never repeat the received questions, just answer directly like:
-
-question: What is your name
-bot: I'm Arnav Atri!
-
----
-
-Context:
-{context}
-
-Question:
-{question}
-
-Answer as Arnav. Do NOT restate, rephrase, or repeat the question in your answer. Simply provide a direct, natural response:
-"""
-
-def load_embeddings():
-    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-
-def load_vectorstore(embeddings):
-    return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
-
-def get_conversational_chain():
-    llm = ChatGroq(
-        model_name="llama3-70b-8192",
-        temperature=0.3,
-        streaming=True,
-        api_key=GROQ_API_KEY,
-    )
-
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-    embeddings = load_embeddings()
-    vector_db = load_vectorstore(embeddings)
-
-    prompt = PromptTemplate(
-        input_variables=["context", "question"],
-        template=PROMPT_TEMPLATE
-    )
-
-    return ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=vector_db.as_retriever(),
-        memory=memory,
-        combine_docs_chain_kwargs={"prompt": prompt}
-    )
+# Chain for RAG + Chat
+chain = ConversationalRetrievalChain.from_llm(
+    llm=llm,
+    retriever=retriever,
+    memory=memory,
+    combine_docs_chain_kwargs={"prompt": prompt}
+)
 
 # Streamlit UI
-st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
-st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
-st.divider()
+st.title("Campus AI Chatbot 🤖")
+st.markdown("Ask questions based on DSEU information.")
 
-# Load or create the chain
-if "chat_chain" not in st.session_state:
-    st.session_state.chat_chain = get_conversational_chain()
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-# Display chat history
-for message in st.session_state.chat_chain.memory.chat_memory.messages:
-    with st.chat_message("user" if message.type == "human" else "assistant",
-                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
-        st.markdown(message.content)
-
-# Chat input box
-user_input = st.chat_input("Ask Arnav anything...")
+user_input = st.chat_input("Ask me anything...")
 
 if user_input:
-    # Show user message
-    with st.chat_message("user", avatar="🧑‍💻"):
+    with st.chat_message("user"):
         st.markdown(user_input)
 
-    # Show assistant message with streaming
-    with st.chat_message("assistant", avatar="🤖"):
-        stream_handler = NoCompleteStreamHandler(st.container())
-        st.session_state.chat_chain.invoke(
-        {"question": user_input},
-        callbacks=[stream_handler]
-    )
+    with st.chat_message("assistant"):
+        stream_handler = StreamHandler(st.empty())
+        response = chain.invoke(
+            {"question": user_input},
+            callbacks=[stream_handler]
+        )
+        st.session_state.chat_history.append((user_input, response["answer"]))
