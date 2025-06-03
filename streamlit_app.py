@@ -1,14 +1,12 @@
 import os
 import streamlit as st
-from dotenv import load_dotenv
-from langchain.vectorstores import FAISS
+import pickle
+from langchain_community.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
-from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferMemory
-from langchain_community.chat_models import ChatGroq
-from langchain.chains.llm import LLMChain
-from langchain.chains.combine_documents import StuffDocumentsChain
+from langchain_groq import ChatGroq
+from langchain.callbacks.base import BaseCallbackHandler
 
 load_dotenv()
 
