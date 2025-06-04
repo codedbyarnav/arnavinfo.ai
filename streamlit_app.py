@@ -26,6 +26,11 @@ class NoCompleteStreamHandler(BaseCallbackHandler):
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+# --- Clear memory.json on bot reload ---
+with open("memory.json", "w") as f:
+    json.dump({}, f)
+
+
 # --- Page config ---
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
