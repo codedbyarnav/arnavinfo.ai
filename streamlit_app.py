@@ -7,7 +7,6 @@ from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
-from langchain.chains.qa_with_sources import load_qa_chain
 from langchain_groq import ChatGroq
 from langchain.callbacks.base import BaseCallbackHandler
 
