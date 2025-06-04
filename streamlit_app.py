@@ -1,10 +1,9 @@
 import os
-import json
 from dotenv import load_dotenv
 import streamlit as st
 
 from langchain_community.vectorstores import FAISS
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationEntityMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
@@ -25,11 +24,6 @@ class NoCompleteStreamHandler(BaseCallbackHandler):
 # --- Load environment variables ---
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-# --- Clear memory.json on bot reload ---
-MEMORY_FILE = "memory.json"
-with open(MEMORY_FILE, "w") as f:
-    json.dump({}, f)
 
 # --- Page config ---
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
@@ -56,33 +50,6 @@ User: {question}
 Arnav:
 """
 
-# --- Memory JSON Handlers ---
-def load_memory_json():
-    if os.path.exists(MEMORY_FILE):
-        with open(MEMORY_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-def save_memory_json(memory):
-    with open(MEMORY_FILE, "w") as f:
-        json.dump(memory, f, indent=4)
-
-def process_user_memory_input(user_input, memory):
-    if user_input.lower().startswith("remember "):
-        try:
-            _, key_value = user_input.split("remember ", 1)
-            key, value = key_value.split(" is ", 1)
-            memory[key.strip().lower()] = value.strip()
-            save_memory_json(memory)
-            return f"Got it! I'll remember that {key.strip()} is {value.strip()}."
-        except:
-            return "Please use format: remember <thing> is <description>."
-    if user_input.lower().startswith("what is"):
-        key = user_input.lower().replace("what is", "").strip().rstrip("?")
-        if key in memory:
-            return memory[key]
-    return None
-
 # --- Helpers ---
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -97,9 +64,10 @@ def get_conversational_chain():
         streaming=True,
         api_key=GROQ_API_KEY,
     )
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
+
+    entity_memory = ConversationEntityMemory(llm=llm)
 
     prompt = PromptTemplate(
         input_variables=["context", "question"],
@@ -109,7 +77,7 @@ def get_conversational_chain():
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vector_db.as_retriever(),
-        memory=memory,
+        memory=entity_memory,
         combine_docs_chain_kwargs={"prompt": prompt}
     )
 
@@ -122,10 +90,6 @@ st.divider()
 if "chat_chain" not in st.session_state:
     st.session_state.chat_chain = get_conversational_chain()
 
-# --- Load persistent memory ---
-if "json_memory" not in st.session_state:
-    st.session_state.json_memory = load_memory_json()
-
 # --- Chat Input ---
 user_input = st.chat_input("Ask Arnav anything...")
 
@@ -134,18 +98,13 @@ if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-    memory_response = process_user_memory_input(user_input, st.session_state.json_memory)
-    if memory_response:
-        with st.chat_message("assistant", avatar="🤖"):
-            st.markdown(memory_response)
-    else:
-        with st.chat_message("assistant", avatar="🤖"):
-            container = st.container()
-            stream_handler = NoCompleteStreamHandler(container)
-            st.session_state.chat_chain(
-                {"question": user_input},
-                callbacks=[stream_handler]
-            )
+    with st.chat_message("assistant", avatar="🤖"):
+        container = st.container()
+        stream_handler = NoCompleteStreamHandler(container)
+        st.session_state.chat_chain(
+            {"question": user_input},
+            callbacks=[stream_handler]
+        )
 
 # --- Show full chat history ---
 messages = st.session_state.chat_chain.memory.chat_memory.messages
