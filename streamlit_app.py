@@ -67,7 +67,7 @@ def get_conversational_chain():
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
 
-    entity_memory = ConversationEntityMemory(llm=llm)
+    entity_memory = ConversationEntityMemory(llm=llm, return_messages=True)
 
     prompt = PromptTemplate(
         input_variables=["context", "question"],
