@@ -65,7 +65,7 @@ def load_vectorstore(embeddings):
 
 def get_conversational_chain():
     llm = ChatGroq(
-        model_name="mixtral-8x7b-32768",  # ✅ FIXED MODEL NAME
+        model_name="llama3-8b-8192",  # ✅ FIXED MODEL NAME
         temperature=0.3,
         streaming=True,
         api_key=GROQ_API_KEY,
