@@ -116,7 +116,7 @@ messages = st.session_state.chat_chain.memory.chat_memory.messages
 for message in messages:
     with st.chat_message("user" if message.type == "human" else "assistant",
                          avatar="🧑‍💻" if message.type == "human" else "🤖"):
-        st.markdown(message)
+        st.markdown(message.contents)
 
 # --- Footer ---
 st.markdown("""
