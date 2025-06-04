@@ -27,9 +27,9 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 # --- Clear memory.json on bot reload ---
-with open("memory.json", "w") as f:
+MEMORY_FILE = "memory.json"
+with open(MEMORY_FILE, "w") as f:
     json.dump({}, f)
-
 
 # --- Page config ---
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
@@ -56,9 +56,7 @@ User: {question}
 Arnav:
 """
 
-# --- Memory JSON File ---
-MEMORY_FILE = "memory.json"
-
+# --- Memory JSON Handlers ---
 def load_memory_json():
     if os.path.exists(MEMORY_FILE):
         with open(MEMORY_FILE, "r") as f:
@@ -124,7 +122,7 @@ st.divider()
 if "chat_chain" not in st.session_state:
     st.session_state.chat_chain = get_conversational_chain()
 
-# Load persistent memory
+# --- Load persistent memory ---
 if "json_memory" not in st.session_state:
     st.session_state.json_memory = load_memory_json()
 
