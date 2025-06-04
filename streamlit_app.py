@@ -73,8 +73,6 @@ def get_conversational_chain():
         template=PROMPT_TEMPLATE
     )
 
-    qa_chain = load_qa_chain(llm=llm, chain_type="stuff", prompt=prompt)
-
     return ConversationalRetrievalChain(
         retriever=vector_db.as_retriever(),
         combine_docs_chain=qa_chain,
