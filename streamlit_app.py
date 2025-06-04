@@ -103,10 +103,7 @@ if user_input:
         container = st.container()
         stream_handler = NoCompleteStreamHandler(container)
         st.session_state.chat_chain(
-            {
-                "question": user_input,
-                "chat_history": st.session_state.chat_chain.memory.chat_memory.messages
-            },
+            {"question": user_input},
             callbacks=[stream_handler]
         )
 
