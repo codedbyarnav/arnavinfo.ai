@@ -7,6 +7,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
+from langchain.chains.qa_with_sources import load_qa_chain
 from langchain_groq import ChatGroq
 from langchain.callbacks.base import BaseCallbackHandler
 
@@ -40,20 +41,14 @@ Important:
 - NEVER repeat, rephrase, or restate the user's question anywhere in your response.
 - Answer directly and naturally like Arnav would.
 
-Example:
-User question: What is your name?
-Good answer: I'm Arnav Atri!
-Bad answer: You asked what my name is. I'm Arnav Atri.
-
 ---
 
 Context:
 {context}
 
-Question:
-{question}
+User: {question}
 
-Answer as Arnav. Do NOT include the question in your answer. Provide only a direct and natural response:
+Arnav:
 """
 
 # --- Helpers ---
@@ -65,7 +60,7 @@ def load_vectorstore(embeddings):
 
 def get_conversational_chain():
     llm = ChatGroq(
-        model_name="llama3-8b-8192",  # ✅ FIXED MODEL NAME
+        model_name="llama3-8b-8192",
         temperature=0.3,
         streaming=True,
         api_key=GROQ_API_KEY,
@@ -79,11 +74,13 @@ def get_conversational_chain():
         template=PROMPT_TEMPLATE
     )
 
-    return ConversationalRetrievalChain.from_llm(
-        llm=llm,
+    qa_chain = load_qa_chain(llm=llm, chain_type="stuff", prompt=prompt)
+
+    return ConversationalRetrievalChain(
         retriever=vector_db.as_retriever(),
+        combine_docs_chain=qa_chain,
         memory=memory,
-        combine_docs_chain_kwargs={"prompt": prompt}
+        verbose=False  # Optional: set True for debugging
     )
 
 # --- UI Header ---
@@ -111,7 +108,7 @@ if user_input:
             callbacks=[stream_handler]
         )
 
-# --- Show full chat history (older first, newer last) ---
+# --- Show full chat history ---
 messages = st.session_state.chat_chain.memory.chat_memory.messages
 for message in messages:
     with st.chat_message("user" if message.type == "human" else "assistant",
