@@ -1,3 +1,4 @@
+
 import os
 from dotenv import load_dotenv
 import streamlit as st
@@ -94,7 +95,6 @@ if "chat_chain" not in st.session_state:
 user_input = st.chat_input("Ask Arnav anything...")
 
 # --- Chat Processing ---
-# --- Chat Processing ---
 if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
@@ -106,7 +106,6 @@ if user_input:
             {"question": user_input},
             callbacks=[stream_handler]
         )
-
 
 # --- Show full chat history ---
 messages = st.session_state.chat_chain.memory.chat_memory.messages
