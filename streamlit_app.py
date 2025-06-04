@@ -112,7 +112,11 @@ if user_input:
         )
 
 # --- Show full chat history (older first, newer last) ---
-
+messages = st.session_state.chat_chain.memory.chat_memory.messages
+for message in messages:
+    with st.chat_message("user" if message.type == "human" else "assistant",
+                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
+        st.markdown(message)
 
 # --- Footer ---
 st.markdown("""
