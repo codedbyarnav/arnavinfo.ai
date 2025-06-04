@@ -73,11 +73,11 @@ def get_conversational_chain():
         template=PROMPT_TEMPLATE
     )
 
-    return ConversationalRetrievalChain(
+    return ConversationalRetrievalChain.from_llm(
+        llm=llm,
         retriever=vector_db.as_retriever(),
-        combine_docs_chain=qa_chain,
         memory=memory,
-        verbose=False  # Optional: set True for debugging
+        combine_docs_chain_kwargs={"prompt": prompt}
     )
 
 # --- UI Header ---
