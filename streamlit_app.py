@@ -1,22 +1,21 @@
 import streamlit as st
+
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationEntityMemory
+from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain.chat_models import ChatOpenAI
 from langchain.callbacks.base import BaseCallbackHandler
 
-# Load OpenAI API Key securely
+# Load API key securely
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 
-# Page config
+# Streamlit page config
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
-# Vector DB path
+# Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
-
-# Custom prompt
 PROMPT_TEMPLATE = """
 You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
 
@@ -34,14 +33,14 @@ Question:
 Answer as Arnav:
 """
 
-# Embeddings & vector DB loader
+# Embeddings and vector store loader
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# Streaming handler
+# Streaming handler to stream inside chat bubble
 class StreamHandler(BaseCallbackHandler):
     def __init__(self, container):
         self.container = container
@@ -49,31 +48,31 @@ class StreamHandler(BaseCallbackHandler):
 
     def on_llm_new_token(self, token: str, **kwargs):
         self.text += token
-        self.container.markdown(self.text + "▌")
+        self.container.markdown(self.text + "▌")  # live update with cursor
 
-# Build chain
-def build_chain(callbacks=None, memory=None):
+# Chain builder
+def get_conversational_chain(stream_handler):
     llm = ChatOpenAI(
         model_name="gpt-3.5-turbo",
         openai_api_key=OPENAI_API_KEY,
         streaming=True,
-        callbacks=callbacks or []
+        callbacks=[stream_handler],
     )
-
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     embeddings = load_embeddings()
-    vectorstore = load_vectorstore(embeddings)
+    vector_db = load_vectorstore(embeddings)
 
     prompt = PromptTemplate(
         input_variables=["context", "question"],
-        template=PROMPT_TEMPLATE
+        template=PROMPT_TEMPLATE,
     )
 
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
-        retriever=vectorstore.as_retriever(),
+        retriever=vector_db.as_retriever(),
         memory=memory,
         combine_docs_chain_kwargs={"prompt": prompt},
-        return_source_documents=False
+        return_source_documents=False,
     )
 
 # Header
@@ -81,40 +80,36 @@ st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Init memory and chain
-if "memory" not in st.session_state:
-    st.session_state.memory = ConversationEntityMemory(
-        llm=ChatOpenAI(openai_api_key=OPENAI_API_KEY),
-        return_messages=True
-    )
+# Initialize chat chain once
+if "chat_chain" not in st.session_state:
+    dummy_container = st.empty()  # Placeholder for first stream handler
+    stream_handler = StreamHandler(dummy_container)
+    st.session_state.chat_chain = get_conversational_chain(stream_handler)
 
-if "chain" not in st.session_state:
-    st.session_state.chain = build_chain(memory=st.session_state.memory)
+# Show previous messages
+for msg in st.session_state.chat_chain.memory.chat_memory.messages:
+    role = "user" if msg.type == "human" else "assistant"
+    avatar = "🧑‍💻" if role == "user" else "🤖"
+    with st.chat_message(role, avatar=avatar):
+        st.markdown(msg.content)
+   
 
-# Display chat history properly
-for msg in st.session_state.memory.chat_memory.messages:
-    if msg.type == "human":
-        with st.chat_message("user", avatar="🧑‍💻"):
-            st.markdown(msg.content)
-    elif msg.type == "ai":
-        with st.chat_message("assistant", avatar="🤖"):
-            st.markdown(msg.content)
-
-# Input
+# Input box
 user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
-    # ✅ Show user message immediately
+    with st.chat_message("assistant", avatar="🤖") as assistant_container:
+        stream_placeholder = assistant_container.container()
+        stream_handler = StreamHandler(stream_placeholder)
+
+        # Create new LLM with streaming callback (fresh one per run)
+        chat_chain = get_conversational_chain(stream_handler)
+        st.session_state.chat_chain = chat_chain  # Replace to retain memory
+
+        # Ask the question
+        chat_chain.invoke({"question": user_input})
+        
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
-
-    # ✅ Prepare bot response bubble and stream inside it
-    with st.chat_message("assistant", avatar="🤖") as bot_container:
-        response_area = bot_container.container()
-        stream_handler = StreamHandler(response_area)
-
-        chain = build_chain(callbacks=[stream_handler], memory=st.session_state.memory)
-        chain.invoke({"question": user_input})
-
 # Footer
 st.markdown("""
 <hr style="margin-top: 30px;">
