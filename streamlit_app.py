@@ -90,9 +90,13 @@ if "chat_chain" not in st.session_state:
     st.session_state.chat_chain = get_conversational_chain(st.empty())
 
 # Display previous chat
+# Properly show message history
 for msg in st.session_state.chat_chain.memory.chat_memory.messages:
-    with st.chat_message("user" if msg.type == "human" else "assistant", avatar="🧑‍💻" if msg.type == "human" else "🤖"):
+    role = "user" if msg.type == "human" else "assistant"
+    avatar = "🧑‍💻" if role == "user" else "🤖"
+    with st.chat_message(role, avatar=avatar):
         st.markdown(msg.content)
+
 
 # User Input
 user_input = st.chat_input("Ask Arnav anything...")
@@ -103,6 +107,11 @@ if user_input:
     with st.chat_message("assistant", avatar="🤖"):
         container = st.empty()
         st.session_state.chat_chain.invoke({"question": user_input})
+
+if st.button("🧹 Clear Chat"):
+    st.session_state.chat_chain.memory.clear()
+    st.experimental_rerun()
+
 
 # Footer
 st.markdown("""
