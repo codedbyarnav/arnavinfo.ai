@@ -28,7 +28,7 @@ Context:
 {context}
 
 Question:
-{question}
+{input}
 
 Answer as Arnav:
 """
@@ -69,7 +69,7 @@ def get_conversational_chain(stream_handler):
     vector_db = load_vectorstore(embeddings)
 
     prompt = PromptTemplate(
-        input_variables=["context", "question"],
+        input_variables=["context", "input"],
         template=PROMPT_TEMPLATE,
     )
 
