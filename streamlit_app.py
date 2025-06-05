@@ -1,5 +1,4 @@
 import streamlit as st
-
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationEntityMemory
@@ -28,7 +27,7 @@ Context:
 {context}
 
 Question:
-{input}
+{question}
 
 Answer as Arnav:
 """
@@ -52,10 +51,11 @@ class StreamHandler(BaseCallbackHandler):
 
 # Create entity memory once
 if "entity_memory" not in st.session_state:
-    st.session_state.entity_memory = ConversationEntityMemory(llm=ChatOpenAI(
-        model_name="gpt-3.5-turbo",
-        openai_api_key=OPENAI_API_KEY
-    ), memory_key="chat_history", return_messages=True)
+    st.session_state.entity_memory = ConversationEntityMemory(
+        llm=ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=OPENAI_API_KEY),
+        memory_key="chat_history",
+        return_messages=True
+    )
 
 # Chain builder
 def get_conversational_chain(stream_handler):
@@ -69,7 +69,7 @@ def get_conversational_chain(stream_handler):
     vector_db = load_vectorstore(embeddings)
 
     prompt = PromptTemplate(
-        input_variables=["context", "input"],
+        input_variables=["context", "question"],
         template=PROMPT_TEMPLATE,
     )
 
@@ -79,6 +79,7 @@ def get_conversational_chain(stream_handler):
         memory=st.session_state.entity_memory,
         combine_docs_chain_kwargs={"prompt": prompt},
         return_source_documents=False,
+        input_key="question"
     )
 
 # Header
@@ -88,7 +89,7 @@ st.divider()
 
 # Initialize chat chain once
 if "chat_chain" not in st.session_state:
-    dummy_container = st.empty()  # Placeholder for first stream handler
+    dummy_container = st.empty()
     stream_handler = StreamHandler(dummy_container)
     st.session_state.chat_chain = get_conversational_chain(stream_handler)
 
@@ -102,21 +103,16 @@ for msg in st.session_state.entity_memory.chat_memory.messages:
 # User input and chat response
 user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
-    # Show user message
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-    # Show assistant response with streaming
     with st.chat_message("assistant", avatar="🤖"):
         stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
-
-        # Rebuild chain with fresh stream handler, use existing memory
         st.session_state.chat_chain = get_conversational_chain(stream_handler)
 
-        # Invoke chain
-        st.session_state.chat_chain.invoke({"input": user_input})
-
+        # Corrected input key:
+        st.session_state.chat_chain.invoke({"question": user_input})
 
 # Footer
 st.markdown("""
