@@ -3,27 +3,18 @@ from dotenv import load_dotenv
 import streamlit as st
 
 from langchain_community.vectorstores import FAISS
-from langchain_groq import ChatGroq
+from langchain.chat_models import ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.callbacks.base import BaseCallbackHandler
-
-# --- Custom Stream Handler for streaming ---
-class StreamlitCallbackHandler(BaseCallbackHandler):
-    def __init__(self, container):
-        self.container = container
-        self.text_element = container.empty()
-        self.text = ""
-
-    def on_llm_new_token(self, token: str, **kwargs):
-        self.text += token
-        self.text_element.markdown(self.text)
+from langchain.callbacks.streamlit import StreamlitCallbackHandler
 
 # Load environment variables
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Page settings
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
@@ -31,7 +22,7 @@ st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 # Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
-# Custom Prompt Template
+# Custom Prompt
 PROMPT_TEMPLATE = """
 You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
 
@@ -49,22 +40,22 @@ Question:
 Answer as Arnav:
 """
 
-# Load embeddings
+# Loaders
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-# Load vectorstore
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# Create conversational chain with streaming
 def get_conversational_chain():
-    llm = ChatGroq(
-        model_name="llama3-8b-8192",
+    llm = ChatOpenAI(
+        openai_api_key=OPENAI_API_KEY,
         temperature=0.3,
         streaming=True,
-        api_key=GROQ_API_KEY
+        callbacks=[StreamlitCallbackHandler(st.container())],
+        model_name="gpt-3.5-turbo"  # or "gpt-4"
     )
+
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
@@ -86,17 +77,16 @@ st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Initialize chat chain
+# Load chat chain
 if "chat_chain" not in st.session_state:
     st.session_state.chat_chain = get_conversational_chain()
 
 # Display chat history
 for message in st.session_state.chat_chain.memory.chat_memory.messages:
-    with st.chat_message("user" if message.type == "human" else "assistant",
-                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
+    with st.chat_message("user" if message.type == "human" else "assistant", avatar="🧑‍💻" if message.type == "human" else "🤖"):
         st.markdown(message.content)
 
-# Chat input
+# Chat Input
 user_input = st.chat_input("Ask Arnav anything...")
 
 if user_input:
@@ -104,20 +94,8 @@ if user_input:
         st.markdown(user_input)
 
     with st.chat_message("assistant", avatar="🤖"):
-        container = st.container()
-        stream_handler = StreamlitCallbackHandler(container)
-
-        # Pass question and chat_history for context
-        chat_history = [
-            (msg.content, st.session_state.chat_chain.memory.chat_memory.messages[idx + 1].content)
-            for idx, msg in enumerate(st.session_state.chat_chain.memory.chat_memory.messages)
-            if idx % 2 == 0 and (idx + 1) < len(st.session_state.chat_chain.memory.chat_memory.messages)
-        ] if st.session_state.chat_chain.memory.chat_memory.messages else []
-
-        output = st.session_state.chat_chain.invoke(
-            {"question": user_input, "chat_history": chat_history},
-            config={"callbacks": [stream_handler]}
-        )
+        response = st.session_state.chat_chain.invoke({"question": user_input})
+        st.markdown(response["answer"])
 
 # Footer with contact links
 st.markdown("""
