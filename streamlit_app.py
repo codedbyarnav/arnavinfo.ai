@@ -12,8 +12,7 @@ from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.callbacks.base import BaseCallbackHandler
 
 # Load environment variables
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 
 # Streamlit page setup
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
@@ -60,9 +59,8 @@ class StreamHandler(BaseCallbackHandler):
 def get_conversational_chain(container):
     llm = ChatOpenAI(
         model_name="gpt-3.5-turbo",
-        temperature=0.3,
-        streaming=True,
         openai_api_key=OPENAI_API_KEY,
+        streaming=True,
         callbacks=[StreamHandler(container)]
     )
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
