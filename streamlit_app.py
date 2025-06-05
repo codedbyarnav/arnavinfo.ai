@@ -115,7 +115,8 @@ if user_input:
         st.session_state.chat_chain = get_conversational_chain(stream_handler)
 
         # Invoke chain
-        st.session_state.chat_chain.invoke({"question": user_input})
+        st.session_state.chat_chain.invoke({"input": user_input})
+
 
 # Footer
 st.markdown("""
