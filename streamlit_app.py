@@ -101,12 +101,14 @@ if user_input:
     with st.chat_message("assistant", avatar="🤖"):
         container = st.container()
         stream_handler = NoCompleteStreamHandler(container)
+
+        # Fix: Pass both required inputs: question and chat_history
         output = st.session_state.chat_chain.invoke(
-        {
-            "question": user_input,
-            "chat_history": st.session_state.chat_chain.memory.chat_memory.messages,
-        },
-        config={"callbacks": [stream_handler]}
+            {
+                "question": user_input,
+                "chat_history": st.session_state.chat_chain.memory.chat_memory.messages,
+            },
+            config={"callbacks": [stream_handler]}
         )
 
 # --- Show full chat history ---
