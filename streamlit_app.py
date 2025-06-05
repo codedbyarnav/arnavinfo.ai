@@ -1,4 +1,5 @@
 import streamlit as st
+
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationEntityMemory
@@ -52,7 +53,10 @@ class StreamHandler(BaseCallbackHandler):
 # Create entity memory once
 if "entity_memory" not in st.session_state:
     st.session_state.entity_memory = ConversationEntityMemory(
-        llm=ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=OPENAI_API_KEY),
+        llm=ChatOpenAI(
+            model_name="gpt-3.5-turbo",
+            openai_api_key=OPENAI_API_KEY
+        ),
         memory_key="chat_history",
         return_messages=True
     )
@@ -78,8 +82,7 @@ def get_conversational_chain(stream_handler):
         retriever=vector_db.as_retriever(),
         memory=st.session_state.entity_memory,
         combine_docs_chain_kwargs={"prompt": prompt},
-        return_source_documents=False,
-        input_key="question"
+        return_source_documents=False
     )
 
 # Header
@@ -109,9 +112,11 @@ if user_input:
     with st.chat_message("assistant", avatar="🤖"):
         stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
+
+        # Rebuild chain with fresh stream handler
         st.session_state.chat_chain = get_conversational_chain(stream_handler)
 
-        # Corrected input key:
+        # ✅ Fixed input key to "question"
         st.session_state.chat_chain.invoke({"question": user_input})
 
 # Footer
