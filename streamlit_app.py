@@ -100,7 +100,7 @@ if user_input:
         st.markdown(user_input)
 
     with st.chat_message("assistant", avatar="🤖") as assistant_container:
-        stream_placeholder = assistant_container.container()
+        stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
 
         # Create new LLM with streaming callback (fresh one per run)
