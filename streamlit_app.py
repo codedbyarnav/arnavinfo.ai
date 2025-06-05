@@ -81,6 +81,16 @@ def get_conversational_chain():
         combine_docs_chain_kwargs={"prompt": prompt}
     )
 
+# --- Utility to convert messages into list of (human, ai) tuples ---
+def get_chat_history_tuples(messages):
+    history = []
+    # messages is a list of Message objects: alternate human and ai
+    for i in range(0, len(messages), 2):
+        human_msg = messages[i].content if i < len(messages) else ""
+        ai_msg = messages[i + 1].content if i + 1 < len(messages) else ""
+        history.append((human_msg, ai_msg))
+    return history
+
 # --- UI Header ---
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
@@ -102,8 +112,13 @@ if user_input:
         container = st.container()
         stream_handler = NoCompleteStreamHandler(container)
 
+        # Get current chat history as list of (human, ai) tuples
+        messages = st.session_state.chat_chain.memory.chat_memory.messages
+        chat_history_tuples = get_chat_history_tuples(messages)
+
+        # Pass both question and chat_history to the chain
         output = st.session_state.chat_chain.invoke(
-            {"question": user_input},
+            {"question": user_input, "chat_history": chat_history_tuples},
             config={"callbacks": [stream_handler]}
         )
 
