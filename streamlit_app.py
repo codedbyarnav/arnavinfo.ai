@@ -1,4 +1,3 @@
-
 import os
 from dotenv import load_dotenv
 import streamlit as st
@@ -68,7 +67,12 @@ def get_conversational_chain():
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
 
-    entity_memory = ConversationEntityMemory(llm=llm, return_messages=True)
+    memory = ConversationEntityMemory(
+        llm=llm,
+        memory_key="chat_history",
+        input_key="question",
+        return_messages=True
+    )
 
     prompt = PromptTemplate(
         input_variables=["context", "question"],
@@ -78,7 +82,7 @@ def get_conversational_chain():
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vector_db.as_retriever(),
-        memory=entity_memory,
+        memory=memory,
         combine_docs_chain_kwargs={"prompt": prompt}
     )
 
@@ -102,7 +106,7 @@ if user_input:
     with st.chat_message("assistant", avatar="🤖"):
         container = st.container()
         stream_handler = NoCompleteStreamHandler(container)
-        st.session_state.chat_chain(
+        response = st.session_state.chat_chain(
             {"question": user_input},
             callbacks=[stream_handler]
         )
