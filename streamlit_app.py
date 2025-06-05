@@ -94,22 +94,24 @@ for msg in st.session_state.chat_chain.memory.chat_memory.messages:
         st.markdown(msg.content)
    
 
-# Input box
 user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
-    with st.chat_message("assistant", avatar="🤖") as assistant_container:
-        stream_placeholder = assistant_container.container()
-        stream_handler = StreamHandler(stream_placeholder)
-
-        # Create new LLM with streaming callback (fresh one per run)
-        chat_chain = get_conversational_chain(stream_handler)
-        st.session_state.chat_chain = chat_chain  # Replace to retain memory
-
-        # Ask the question
-        chat_chain.invoke({"question": user_input})
-        
+    # Show user message first
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
+
+    # Show bot response
+    with st.chat_message("assistant", avatar="🤖"):
+        stream_placeholder = st.empty()
+        stream_handler = StreamHandler(stream_placeholder)
+
+        # Create new chain with stream handler
+        chat_chain = get_conversational_chain(stream_handler)
+        st.session_state.chat_chain = chat_chain  # Save new chain with memory
+
+        # Invoke chain
+        chat_chain.invoke({"question": user_input})
+
 # Footer
 st.markdown("""
 <hr style="margin-top: 30px;">
