@@ -2,7 +2,7 @@ import streamlit as st
 
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationEntityMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain.chat_models import ChatOpenAI
@@ -48,7 +48,14 @@ class StreamHandler(BaseCallbackHandler):
 
     def on_llm_new_token(self, token: str, **kwargs):
         self.text += token
-        self.container.markdown(self.text + "▌")  # live update with cursor
+        self.container.markdown(self.text + "▌")
+
+# Create entity memory once
+if "entity_memory" not in st.session_state:
+    st.session_state.entity_memory = ConversationEntityMemory(llm=ChatOpenAI(
+        model_name="gpt-3.5-turbo",
+        openai_api_key=OPENAI_API_KEY
+    ), memory_key="chat_history", return_messages=True)
 
 # Chain builder
 def get_conversational_chain(stream_handler):
@@ -58,7 +65,6 @@ def get_conversational_chain(stream_handler):
         streaming=True,
         callbacks=[stream_handler],
     )
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
 
@@ -70,7 +76,7 @@ def get_conversational_chain(stream_handler):
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vector_db.as_retriever(),
-        memory=memory,
+        memory=st.session_state.entity_memory,
         combine_docs_chain_kwargs={"prompt": prompt},
         return_source_documents=False,
     )
@@ -87,30 +93,29 @@ if "chat_chain" not in st.session_state:
     st.session_state.chat_chain = get_conversational_chain(stream_handler)
 
 # Show previous messages
-for msg in st.session_state.chat_chain.memory.chat_memory.messages:
+for msg in st.session_state.entity_memory.chat_memory.messages:
     role = "user" if msg.type == "human" else "assistant"
     avatar = "🧑‍💻" if role == "user" else "🤖"
     with st.chat_message(role, avatar=avatar):
         st.markdown(msg.content)
-   
 
+# User input and chat response
 user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
-    # Show user message first
+    # Show user message
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
-    # Show bot response
+    # Show assistant response with streaming
     with st.chat_message("assistant", avatar="🤖"):
         stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
 
-        # Create new chain with stream handler
-        chat_chain = get_conversational_chain(stream_handler)
-        st.session_state.chat_chain = chat_chain  # Save new chain with memory
+        # Rebuild chain with fresh stream handler, use existing memory
+        st.session_state.chat_chain = get_conversational_chain(stream_handler)
 
         # Invoke chain
-        chat_chain.invoke({"question": user_input})
+        st.session_state.chat_chain.invoke({"question": user_input})
 
 # Footer
 st.markdown("""
