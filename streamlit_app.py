@@ -1,4 +1,3 @@
-
 import streamlit as st
 
 from langchain_community.vectorstores import FAISS
@@ -49,7 +48,7 @@ class StreamHandler(BaseCallbackHandler):
 
     def on_llm_new_token(self, token: str, **kwargs):
         self.text += token
-        self.container.markdown(self.text + "▌")  # live update with cursor
+        self.container.markdown(self.text + "▌")
 
 # Chain builder
 def get_conversational_chain(stream_handler):
@@ -83,7 +82,7 @@ st.divider()
 
 # Initialize chat chain once
 if "chat_chain" not in st.session_state:
-    dummy_container = st.empty()  # Placeholder for first stream handler
+    dummy_container = st.empty()  # placeholder for stream init
     stream_handler = StreamHandler(dummy_container)
     st.session_state.chat_chain = get_conversational_chain(stream_handler)
 
@@ -91,7 +90,8 @@ if "chat_chain" not in st.session_state:
 for msg in st.session_state.chat_chain.memory.chat_memory.messages:
     role = "user" if msg.type == "human" else "assistant"
     avatar = "🧑‍💻" if role == "user" else "🤖"
-   
+    with st.chat_message(role, avatar=avatar):
+        st.markdown(msg.content)
 
 # Input box
 user_input = st.chat_input("Ask Arnav anything...")
@@ -103,12 +103,11 @@ if user_input:
         stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
 
-        # Create new LLM with streaming callback (fresh one per run)
-        chat_chain = get_conversational_chain(stream_handler)
-        st.session_state.chat_chain = chat_chain  # Replace to retain memory
+        # Reuse existing chain and memory, just replace callback for streaming
+        st.session_state.chat_chain.llm.callbacks = [stream_handler]
 
-        # Ask the question
-        chat_chain.invoke({"question": user_input})
+        # Run chain
+        st.session_state.chat_chain.invoke({"question": user_input})
 
 # Footer
 st.markdown("""
@@ -124,3 +123,4 @@ st.markdown("""
 </a>
 </div>
 """, unsafe_allow_html=True)
+
