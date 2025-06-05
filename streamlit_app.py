@@ -91,13 +91,14 @@ if "chat_chain" not in st.session_state:
 for msg in st.session_state.chat_chain.memory.chat_memory.messages:
     role = "user" if msg.type == "human" else "assistant"
     avatar = "🧑‍💻" if role == "user" else "🤖"
-    with st.chat_message(role, avatar=avatar):
-        st.markdown(msg.content)
    
 
 # Input box
 user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
+    with st.chat_message("user", avatar="🧑‍💻"):
+        st.markdown(user_input)
+
     with st.chat_message("assistant", avatar="🤖") as assistant_container:
         stream_placeholder = assistant_container.container()
         stream_handler = StreamHandler(stream_placeholder)
@@ -108,9 +109,7 @@ if user_input:
 
         # Ask the question
         chat_chain.invoke({"question": user_input})
-        
-    with st.chat_message("user", avatar="🧑‍💻"):
-        st.markdown(user_input)
+
 # Footer
 st.markdown("""
 <hr style="margin-top: 30px;">
