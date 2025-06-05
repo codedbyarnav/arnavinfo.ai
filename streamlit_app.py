@@ -67,7 +67,7 @@ def get_conversational_chain():
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
 
-    entity_memory = ConversationEntityMemory(llm=llm, return_messages=True)
+    memory = ConversationEntityMemory(llm=llm, return_messages=True)
 
     prompt = PromptTemplate(
         input_variables=["context", "question"],
@@ -77,7 +77,7 @@ def get_conversational_chain():
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vector_db.as_retriever(),
-        memory=entity_memory,
+        memory=memory,
         combine_docs_chain_kwargs={"prompt": prompt}
     )
 
@@ -102,12 +102,10 @@ if user_input:
         container = st.container()
         stream_handler = NoCompleteStreamHandler(container)
 
-        # ✅ FINAL CORRECT version with ConversationEntityMemory
         output = st.session_state.chat_chain.invoke(
             {"question": user_input},
             config={"callbacks": [stream_handler]}
         )
-
 
 # --- Show full chat history ---
 messages = st.session_state.chat_chain.memory.chat_memory.messages
