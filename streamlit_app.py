@@ -3,26 +3,25 @@ from dotenv import load_dotenv
 import streamlit as st
 
 from langchain_community.vectorstores import FAISS
-from langchain.chat_models import ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
+from langchain.chat_models import ChatOpenAI
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain.callbacks.streamlit import StreamlitCallbackHandler
 
 # Load environment variables
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Page settings
+# Streamlit page setup
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
 # Constants
 VECTOR_STORE_PATH = "vectorstore/db_faiss"
 
-# Custom Prompt
+# Prompt Template
 PROMPT_TEMPLATE = """
 You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
 
@@ -47,15 +46,25 @@ def load_embeddings():
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-def get_conversational_chain():
+# Callback handler for streaming
+class StreamHandler(BaseCallbackHandler):
+    def __init__(self, container):
+        self.container = container
+        self.text = ""
+
+    def on_llm_new_token(self, token: str, **kwargs) -> None:
+        self.text += token
+        self.container.markdown(self.text + "|")
+
+# Chain loader
+def get_conversational_chain(container):
     llm = ChatOpenAI(
-        openai_api_key=OPENAI_API_KEY,
+        model_name="gpt-3.5-turbo",
         temperature=0.3,
         streaming=True,
-        callbacks=[StreamlitCallbackHandler(st.container())],
-        model_name="gpt-3.5-turbo"  # or "gpt-4"
+        openai_api_key=OPENAI_API_KEY,
+        callbacks=[StreamHandler(container)]
     )
-
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
@@ -69,35 +78,35 @@ def get_conversational_chain():
         llm=llm,
         retriever=vector_db.as_retriever(),
         memory=memory,
-        combine_docs_chain_kwargs={"prompt": prompt}
+        combine_docs_chain_kwargs={"prompt": prompt},
+        return_source_documents=False
     )
 
-# UI Header
+# Header
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Load chat chain
+# Load chain
 if "chat_chain" not in st.session_state:
-    st.session_state.chat_chain = get_conversational_chain()
+    st.session_state.chat_chain = get_conversational_chain(st.empty())
 
-# Display chat history
-for message in st.session_state.chat_chain.memory.chat_memory.messages:
-    with st.chat_message("user" if message.type == "human" else "assistant", avatar="🧑‍💻" if message.type == "human" else "🤖"):
-        st.markdown(message.content)
+# Display previous chat
+for msg in st.session_state.chat_chain.memory.chat_memory.messages:
+    with st.chat_message("user" if msg.type == "human" else "assistant", avatar="🧑‍💻" if msg.type == "human" else "🤖"):
+        st.markdown(msg.content)
 
-# Chat Input
+# User Input
 user_input = st.chat_input("Ask Arnav anything...")
-
 if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
     with st.chat_message("assistant", avatar="🤖"):
-        response = st.session_state.chat_chain.invoke({"question": user_input})
-        st.markdown(response["answer"])
+        container = st.empty()
+        st.session_state.chat_chain.invoke({"question": user_input})
 
-# Footer with contact links
+# Footer
 st.markdown("""
 <hr style="margin-top: 30px;">
 <div style="text-align: center; font-size: 16px;">
