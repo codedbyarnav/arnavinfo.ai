@@ -3,15 +3,15 @@ from dotenv import load_dotenv
 import streamlit as st
 
 from langchain_community.vectorstores import FAISS
-from langchain.memory import ConversationEntityMemory
+from langchain_groq import ChatGroq
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
-from langchain.chains import ConversationalRetrievalChain
-from langchain_groq import ChatGroq
 from langchain.callbacks.base import BaseCallbackHandler
 
 # --- Custom Stream Handler for streaming ---
-class NoCompleteStreamHandler(BaseCallbackHandler):
+class StreamlitCallbackHandler(BaseCallbackHandler):
     def __init__(self, container):
         self.container = container
         self.text_element = container.empty()
@@ -21,53 +21,53 @@ class NoCompleteStreamHandler(BaseCallbackHandler):
         self.text += token
         self.text_element.markdown(self.text)
 
-# --- Load environment variables ---
+# Load environment variables
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# --- Page config ---
+# Page settings
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
-# --- Prompt Template ---
+# Constants
+VECTOR_STORE_PATH = "vectorstore/db_faiss"
+
+# Custom Prompt Template
 PROMPT_TEMPLATE = """
 You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
 
 Only use the provided information to answer. Do not mention that you are an AI or that your answers come from a context or dataset.
 If you're unsure of something, say "I'm not sure about that yet, but happy to chat more!"
-If the user greets you, greet them back warmly.
-
-Important:
-- NEVER repeat, rephrase, or restate the user's question anywhere in your response.
-- Answer directly and naturally like Arnav would.
-
+If user greets you, greet them back warmly.
 ---
 
 Context:
 {context}
 
-User: {question}
+Question:
+{question}
 
-Arnav:
+Answer as Arnav:
 """
 
-# --- Helpers ---
+# Load embeddings
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
+# Load vectorstore
 def load_vectorstore(embeddings):
-    return FAISS.load_local("vectorstore/db_faiss", embeddings, allow_dangerous_deserialization=True)
+    return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
+# Create conversational chain with streaming
 def get_conversational_chain():
     llm = ChatGroq(
         model_name="llama3-8b-8192",
         temperature=0.3,
         streaming=True,
-        api_key=GROQ_API_KEY,
+        api_key=GROQ_API_KEY
     )
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
-
-    memory = ConversationEntityMemory(llm=llm, return_messages=True)
 
     prompt = PromptTemplate(
         input_variables=["context", "question"],
@@ -81,55 +81,45 @@ def get_conversational_chain():
         combine_docs_chain_kwargs={"prompt": prompt}
     )
 
-# --- Utility to convert messages into list of (human, ai) tuples ---
-def get_chat_history_tuples(messages):
-    history = []
-    # messages is a list of Message objects: alternate human and ai
-    for i in range(0, len(messages), 2):
-        human_msg = messages[i].content if i < len(messages) else ""
-        ai_msg = messages[i + 1].content if i + 1 < len(messages) else ""
-        history.append((human_msg, ai_msg))
-    return history
-
-# --- UI Header ---
+# UI Header
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# --- Init chat chain ---
+# Initialize chat chain
 if "chat_chain" not in st.session_state:
     st.session_state.chat_chain = get_conversational_chain()
 
-# --- Chat Input ---
+# Display chat history
+for message in st.session_state.chat_chain.memory.chat_memory.messages:
+    with st.chat_message("user" if message.type == "human" else "assistant",
+                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
+        st.markdown(message.content)
+
+# Chat input
 user_input = st.chat_input("Ask Arnav anything...")
 
-# --- Chat Processing ---
 if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
         st.markdown(user_input)
 
     with st.chat_message("assistant", avatar="🤖"):
         container = st.container()
-        stream_handler = NoCompleteStreamHandler(container)
+        stream_handler = StreamlitCallbackHandler(container)
 
-        # Get current chat history as list of (human, ai) tuples
-        messages = st.session_state.chat_chain.memory.chat_memory.messages
-        chat_history_tuples = get_chat_history_tuples(messages)
+        # Pass question and chat_history for context
+        chat_history = [
+            (msg.content, st.session_state.chat_chain.memory.chat_memory.messages[idx + 1].content)
+            for idx, msg in enumerate(st.session_state.chat_chain.memory.chat_memory.messages)
+            if idx % 2 == 0 and (idx + 1) < len(st.session_state.chat_chain.memory.chat_memory.messages)
+        ] if st.session_state.chat_chain.memory.chat_memory.messages else []
 
-        # Pass both question and chat_history to the chain
         output = st.session_state.chat_chain.invoke(
-            {"question": user_input, "chat_history": chat_history_tuples},
+            {"question": user_input, "chat_history": chat_history},
             config={"callbacks": [stream_handler]}
         )
 
-# --- Show full chat history ---
-messages = st.session_state.chat_chain.memory.chat_memory.messages
-for message in messages:
-    with st.chat_message("user" if message.type == "human" else "assistant",
-                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
-        st.markdown(message.content)
-
-# --- Footer ---
+# Footer with contact links
 st.markdown("""
 <hr style="margin-top: 30px;">
 <div style="text-align: center; font-size: 16px;">
