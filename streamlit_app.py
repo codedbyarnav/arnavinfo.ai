@@ -70,7 +70,7 @@ def get_conversational_chain(stream_handler):
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vector_db.as_retriever(),
-        memory=memory,
+        memory = ConversationEntityMemory(llm=llm, return_messages=True),
         combine_docs_chain_kwargs={"prompt": prompt},
         return_source_documents=False,
     )
@@ -112,9 +112,9 @@ if user_input:
 
         # Ask the question
         chat_chain.invoke({
-            "question": user_input,
-            "chat_history": st.session_state.chat_chain.memory.chat_memory.messages
+            "question": user_input
         })
+
 
 
 # Footer
