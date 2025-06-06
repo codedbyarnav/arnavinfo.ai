@@ -33,7 +33,7 @@ Question:
 Answer as Arnav:
 """
 
-# Streaming handler to stream inside chat bubble
+# StreamHandler class
 class StreamHandler(BaseCallbackHandler):
     def __init__(self, container):
         self.container = container
@@ -46,25 +46,19 @@ class StreamHandler(BaseCallbackHandler):
     def on_llm_end(self, *args, **kwargs):
         self.container.markdown(self.text)
 
-# Embeddings and vector store loader
+# Helper functions
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# Setup memory, embeddings, retriever, LLM, and chain once
+# Initialize everything only once
 if "chat_chain" not in st.session_state:
-    # Core components
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
     retriever = vector_db.as_retriever()
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
-    prompt = PromptTemplate(
-        input_variables=["context", "question"],
-        template=PROMPT_TEMPLATE,
-    )
 
     dummy_container = st.empty()
     stream_handler = StreamHandler(dummy_container)
@@ -76,7 +70,12 @@ if "chat_chain" not in st.session_state:
         callbacks=[stream_handler],
     )
 
-    chat_chain = ConversationalRetrievalChain.from_llm(
+    prompt = PromptTemplate(
+        input_variables=["context", "question"],
+        template=PROMPT_TEMPLATE,
+    )
+
+    chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=retriever,
         memory=memory,
@@ -84,7 +83,7 @@ if "chat_chain" not in st.session_state:
         return_source_documents=False,
     )
 
-    st.session_state.chat_chain = chat_chain
+    st.session_state.chat_chain = chain
     st.session_state.llm = llm
 
 # Header
@@ -99,7 +98,7 @@ for msg in st.session_state.chat_chain.memory.chat_memory.messages:
     with st.chat_message(role, avatar=avatar):
         st.markdown(msg.content)
 
-# Input box
+# Chat input
 user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
@@ -109,10 +108,11 @@ if user_input:
         stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
 
-        # Update the existing LLM's callback for live stream
-        st.session_state.llm.callbacks = [stream_handler]
+        # Safely update LLM callbacks if it's in session
+        if "llm" in st.session_state:
+            st.session_state.llm.callbacks = [stream_handler]
 
-        # Run chain (which internally uses the same LLM + memory)
+        # Run chain
         st.session_state.chat_chain.invoke({"question": user_input})
 
 # Footer
