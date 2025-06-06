@@ -111,7 +111,11 @@ if user_input:
         st.session_state.chat_chain = chat_chain  # Replace to retain memory
 
         # Ask the question
-        chat_chain.invoke({"question": user_input})
+        chat_chain.invoke({
+            "question": user_input,
+            "chat_history": st.session_state.chat_chain.memory.chat_memory.messages
+        })
+
 
 # Footer
 st.markdown("""
