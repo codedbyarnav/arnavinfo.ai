@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 
 from langchain_community.vectorstores import FAISS
@@ -33,7 +35,14 @@ Question:
 Answer as Arnav:
 """
 
-# StreamHandler class
+# Embeddings and vector store loader
+def load_embeddings():
+    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+
+def load_vectorstore(embeddings):
+    return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
+
+# Streaming handler to stream inside chat bubble
 class StreamHandler(BaseCallbackHandler):
     def __init__(self, container):
         self.container = container
@@ -41,64 +50,51 @@ class StreamHandler(BaseCallbackHandler):
 
     def on_llm_new_token(self, token: str, **kwargs):
         self.text += token
-        self.container.markdown(self.text + "▌")
+        self.container.markdown(self.text + "▌")  # live update with cursor
 
-    def on_llm_end(self, *args, **kwargs):
-        self.container.markdown(self.text)
-
-# Helper functions
-def load_embeddings():
-    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-
-def load_vectorstore(embeddings):
-    return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
-
-# Initialize everything only once
-if "chat_chain" not in st.session_state:
-    embeddings = load_embeddings()
-    vector_db = load_vectorstore(embeddings)
-    retriever = vector_db.as_retriever()
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
-    dummy_container = st.empty()
-    stream_handler = StreamHandler(dummy_container)
-
+# Chain builder
+def get_conversational_chain(stream_handler):
     llm = ChatOpenAI(
         model_name="gpt-3.5-turbo",
         openai_api_key=OPENAI_API_KEY,
         streaming=True,
         callbacks=[stream_handler],
     )
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    embeddings = load_embeddings()
+    vector_db = load_vectorstore(embeddings)
 
     prompt = PromptTemplate(
         input_variables=["context", "question"],
         template=PROMPT_TEMPLATE,
     )
 
-    chain = ConversationalRetrievalChain.from_llm(
+    return ConversationalRetrievalChain.from_llm(
         llm=llm,
-        retriever=retriever,
+        retriever=vector_db.as_retriever(),
         memory=memory,
         combine_docs_chain_kwargs={"prompt": prompt},
         return_source_documents=False,
     )
-
-    st.session_state.chat_chain = chain
-    st.session_state.llm = llm
 
 # Header
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
+# Initialize chat chain once
+if "chat_chain" not in st.session_state:
+    dummy_container = st.empty()  # Placeholder for first stream handler
+    stream_handler = StreamHandler(dummy_container)
+    st.session_state.chat_chain = get_conversational_chain(stream_handler)
+
 # Show previous messages
 for msg in st.session_state.chat_chain.memory.chat_memory.messages:
     role = "user" if msg.type == "human" else "assistant"
     avatar = "🧑‍💻" if role == "user" else "🤖"
-    with st.chat_message(role, avatar=avatar):
-        st.markdown(msg.content)
+   
 
-# Chat input
+# Input box
 user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
@@ -108,12 +104,12 @@ if user_input:
         stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
 
-        # Safely update LLM callbacks if it's in session
-        if "llm" in st.session_state:
-            st.session_state.llm.callbacks = [stream_handler]
+        # Create new LLM with streaming callback (fresh one per run)
+        chat_chain = get_conversational_chain(stream_handler)
+        st.session_state.chat_chain = chat_chain  # Replace to retain memory
 
-        # Run chain
-        st.session_state.chat_chain.invoke({"question": user_input})
+        # Ask the question
+        chat_chain.invoke({"question": user_input})
 
 # Footer
 st.markdown("""
