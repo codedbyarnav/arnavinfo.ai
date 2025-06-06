@@ -1,5 +1,4 @@
 import streamlit as st
-
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationEntityMemory
@@ -33,14 +32,14 @@ Question:
 Answer as Arnav:
 """
 
-# Embeddings and vector store loader
+# Load embeddings and vector store
 def load_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-# Streaming handler to stream inside chat bubble
+# Stream handler
 class StreamHandler(BaseCallbackHandler):
     def __init__(self, container):
         self.container = container
@@ -48,19 +47,19 @@ class StreamHandler(BaseCallbackHandler):
 
     def on_llm_new_token(self, token: str, **kwargs):
         self.text += token
-        self.container.markdown(self.text + "▌")  # live update with cursor
+        self.container.markdown(self.text + "▌")
 
-# Chain builder
-def get_conversational_chain(memory, stream_handler):
+# Build the conversational chain
+def get_conversational_chain(stream_handler, memory):
+    embeddings = load_embeddings()
+    vector_db = load_vectorstore(embeddings)
+    
     llm = ChatOpenAI(
         model_name="gpt-3.5-turbo",
         openai_api_key=OPENAI_API_KEY,
         streaming=True,
-        callbacks=[stream_handler],
+        callbacks=[stream_handler]
     )
-
-    embeddings = load_embeddings()
-    vector_db = load_vectorstore(embeddings)
 
     prompt = PromptTemplate(
         input_variables=["context", "question"],
@@ -75,22 +74,22 @@ def get_conversational_chain(memory, stream_handler):
         return_source_documents=False,
     )
 
-# Header
+# Header UI
 st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Initialize memory and chat chain once
+# Initialize memory and handler (only once)
 if "memory" not in st.session_state:
-    dummy_llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=OPENAI_API_KEY)
-    st.session_state.memory = ConversationEntityMemory(llm=dummy_llm, memory_key="chat_history", return_messages=True)
+    base_llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=OPENAI_API_KEY)
+    st.session_state.memory = ConversationEntityMemory(llm=base_llm, memory_key="chat_history", return_messages=True)
 
 if "chat_chain" not in st.session_state:
     dummy_container = st.empty()
-    stream_handler = StreamHandler(dummy_container)
-    st.session_state.chat_chain = get_conversational_chain(st.session_state.memory, stream_handler)
+    handler = StreamHandler(dummy_container)
+    st.session_state.chat_chain = get_conversational_chain(handler, st.session_state.memory)
 
-# Show full chat history above the input box
+# Display chat history
 chat_memory = st.session_state.memory.chat_memory
 for msg in chat_memory.messages:
     if msg.type == "human":
@@ -108,25 +107,14 @@ if user_input:
 
     with st.chat_message("assistant", avatar="🤖") as assistant_container:
         stream_placeholder = st.empty()
-        stream_handler = StreamHandler(stream_placeholder)
+        handler = StreamHandler(stream_placeholder)
 
-        
+        # Rebuild chain with current handler
+        st.session_state.chat_chain = get_conversational_chain(handler, st.session_state.memory)
 
-        # Format the history for input
-        messages = st.session_state.memory.chat_memory.messages
-        formatted_history = []
-        last_user = None
-        for msg in messages:
-            if msg.type == "human":
-                last_user = msg.content
-            elif msg.type == "ai" and last_user:
-                formatted_history.append((last_user, msg.content))
-                last_user = None
-
-        # Ask the question
+        # Ask the question (only one input key: question)
         st.session_state.chat_chain.invoke({
-            "question": user_input,
-            "chat_history": formatted_history,
+            "question": user_input
         })
 
 # Footer
