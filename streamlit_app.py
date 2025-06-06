@@ -51,14 +51,14 @@ class StreamHandler(BaseCallbackHandler):
         self.container.markdown(self.text + "▌")  # live update with cursor
 
 # Chain builder
-def get_conversational_chain(stream_handler):
+def get_conversational_chain(memory, stream_handler):
     llm = ChatOpenAI(
         model_name="gpt-3.5-turbo",
         openai_api_key=OPENAI_API_KEY,
         streaming=True,
         callbacks=[stream_handler],
     )
-    memory = ConversationEntityMemory(llm=llm, memory_key="chat_history", return_messages=True)
+
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
 
@@ -70,7 +70,7 @@ def get_conversational_chain(stream_handler):
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vector_db.as_retriever(),
-        memory = ConversationEntityMemory(llm=llm, return_messages=True),
+        memory=memory,
         combine_docs_chain_kwargs={"prompt": prompt},
         return_source_documents=False,
     )
@@ -80,14 +80,18 @@ st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Initialize chat chain once
+# Initialize memory and chat chain once
+if "memory" not in st.session_state:
+    dummy_llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=OPENAI_API_KEY)
+    st.session_state.memory = ConversationEntityMemory(llm=dummy_llm, memory_key="chat_history", return_messages=True)
+
 if "chat_chain" not in st.session_state:
-    dummy_container = st.empty()  # Placeholder for first stream handler
+    dummy_container = st.empty()
     stream_handler = StreamHandler(dummy_container)
-    st.session_state.chat_chain = get_conversational_chain(stream_handler)
+    st.session_state.chat_chain = get_conversational_chain(st.session_state.memory, stream_handler)
 
 # Show full chat history above the input box
-chat_memory = st.session_state.chat_chain.memory.chat_memory
+chat_memory = st.session_state.memory.chat_memory
 for msg in chat_memory.messages:
     if msg.type == "human":
         with st.chat_message("user", avatar="🧑‍💻"):
@@ -106,16 +110,25 @@ if user_input:
         stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
 
-        # Create new LLM with streaming callback (fresh one per run)
-        chat_chain = get_conversational_chain(stream_handler)
-        st.session_state.chat_chain = chat_chain  # Replace to retain memory
+        # Update the LLM callback handler with current stream handler
+        st.session_state.chat_chain.llm.callbacks = [stream_handler]
+
+        # Format the history for input
+        messages = st.session_state.memory.chat_memory.messages
+        formatted_history = []
+        last_user = None
+        for msg in messages:
+            if msg.type == "human":
+                last_user = msg.content
+            elif msg.type == "ai" and last_user:
+                formatted_history.append((last_user, msg.content))
+                last_user = None
 
         # Ask the question
-        chat_chain.invoke({
-            "question": user_input
+        st.session_state.chat_chain.invoke({
+            "question": user_input,
+            "chat_history": formatted_history,
         })
-
-
 
 # Footer
 st.markdown("""
