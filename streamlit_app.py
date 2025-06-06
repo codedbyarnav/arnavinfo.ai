@@ -1,10 +1,8 @@
-#working code
-
 import streamlit as st
 
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationEntityMemory
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain.chat_models import ChatOpenAI
@@ -60,7 +58,7 @@ def get_conversational_chain(stream_handler):
         streaming=True,
         callbacks=[stream_handler],
     )
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    memory = ConversationEntityMemory(llm=llm, memory_key="chat_history", return_messages=True)
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
 
@@ -92,7 +90,6 @@ if "chat_chain" not in st.session_state:
 for msg in st.session_state.chat_chain.memory.chat_memory.messages:
     role = "user" if msg.type == "human" else "assistant"
     avatar = "🧑‍💻" if role == "user" else "🤖"
-   
 
 # Input box
 user_input = st.chat_input("Ask Arnav anything...")
