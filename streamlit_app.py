@@ -86,10 +86,15 @@ if "chat_chain" not in st.session_state:
     stream_handler = StreamHandler(dummy_container)
     st.session_state.chat_chain = get_conversational_chain(stream_handler)
 
-# Show previous messages
-for msg in st.session_state.chat_chain.memory.chat_memory.messages:
-    role = "user" if msg.type == "human" else "assistant"
-    avatar = "🧑‍💻" if role == "user" else "🤖"
+# Show full chat history above the input box
+chat_memory = st.session_state.chat_chain.memory.chat_memory
+for msg in chat_memory.messages:
+    if msg.type == "human":
+        with st.chat_message("user", avatar="🧑‍💻"):
+            st.markdown(msg.content)
+    elif msg.type == "ai":
+        with st.chat_message("assistant", avatar="🤖"):
+            st.markdown(msg.content)
 
 # Input box
 user_input = st.chat_input("Ask Arnav anything...")
