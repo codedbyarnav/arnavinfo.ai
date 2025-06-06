@@ -113,6 +113,7 @@ if user_input:
         # Update the LLM callback handler with current stream handler
         st.session_state.chat_chain.llm.callbacks = [stream_handler]
 
+
         # Format the history for input
         messages = st.session_state.memory.chat_memory.messages
         formatted_history = []
