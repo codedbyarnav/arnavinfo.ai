@@ -10,7 +10,7 @@ from langchain.callbacks.base import BaseCallbackHandler
 # Load API key securely
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 
-# Streamlit config
+# Streamlit page config
 st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 
 # Constants
@@ -53,7 +53,7 @@ class StreamHandler(BaseCallbackHandler):
 def get_conversational_chain(stream_handler, memory):
     embeddings = load_embeddings()
     vector_db = load_vectorstore(embeddings)
-    
+
     llm = ChatOpenAI(
         model_name="gpt-3.5-turbo",
         openai_api_key=OPENAI_API_KEY,
@@ -79,22 +79,19 @@ st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_
 st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Initialize memory and handler once
+# Initialize memory and handler (only once)
 if "memory" not in st.session_state:
-    dummy_llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=OPENAI_API_KEY)
-    st.session_state.memory = ConversationEntityMemory(
-        llm=dummy_llm,
-        memory_key="chat_history",
-        return_messages=True
-    )
+    base_llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=OPENAI_API_KEY)
+    st.session_state.memory = ConversationEntityMemory(llm=base_llm, memory_key="chat_history", return_messages=True)
 
 if "chat_chain" not in st.session_state:
     dummy_container = st.empty()
-    dummy_handler = StreamHandler(dummy_container)
-    st.session_state.chat_chain = get_conversational_chain(dummy_handler, st.session_state.memory)
+    handler = StreamHandler(dummy_container)
+    st.session_state.chat_chain = get_conversational_chain(handler, st.session_state.memory)
 
 # Display chat history
-for msg in st.session_state.memory.chat_memory.messages:
+chat_memory = st.session_state.memory.chat_memory
+for msg in chat_memory.messages:
     if msg.type == "human":
         with st.chat_message("user", avatar="🧑‍💻"):
             st.markdown(msg.content)
@@ -102,7 +99,7 @@ for msg in st.session_state.memory.chat_memory.messages:
         with st.chat_message("assistant", avatar="🤖"):
             st.markdown(msg.content)
 
-# Chat input
+# Input box
 user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
@@ -111,9 +108,11 @@ if user_input:
     with st.chat_message("assistant", avatar="🤖") as assistant_container:
         stream_placeholder = st.empty()
         handler = StreamHandler(stream_placeholder)
+
+        # Rebuild chain with current handler
         st.session_state.chat_chain = get_conversational_chain(handler, st.session_state.memory)
 
-        # Corrected input key
+        # Ask the question (correct input key: input)
         st.session_state.chat_chain.invoke({
             "input": user_input
         })
