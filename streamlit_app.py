@@ -26,8 +26,8 @@ If user greets you, greet them back warmly.
 Context:
 {context}
 
-Input:
-{input}
+Question:
+{question}
 
 Answer as Arnav:
 """
@@ -62,7 +62,7 @@ def get_conversational_chain(stream_handler, memory):
     )
 
     prompt = PromptTemplate(
-        input_variables=["context", "input"],
+        input_variables=["context", "question"],
         template=PROMPT_TEMPLATE,
     )
 
@@ -112,9 +112,9 @@ if user_input:
         # Rebuild chain with current handler
         st.session_state.chat_chain = get_conversational_chain(handler, st.session_state.memory)
 
-        # Ask the question (correct input key: input)
+        # Ask the question using the correct input key
         st.session_state.chat_chain.invoke({
-            "input": user_input
+            "question": user_input
         })
 
 # Footer
