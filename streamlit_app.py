@@ -1,129 +1,136 @@
-import streamlit as st
-from langchain_community.vectorstores import FAISS
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationEntityMemory
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.prompts import PromptTemplate
-from langchain.chat_models import ChatOpenAI
-from langchain.callbacks.base import BaseCallbackHandler
 
-# Load API key securely
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-
-# Streamlit page config
-st.set_page_config(page_title="🧠 RealMe.AI", layout="wide")
-
-# Constants
-VECTOR_STORE_PATH = "vectorstore/db_faiss"
-PROMPT_TEMPLATE = """
-You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
-
-Only use the provided information to answer. Do not mention that you are an AI or that your answers come from a context or dataset.
-If you're unsure of something, say "I'm not sure about that yet, but happy to chat more!"
-If user greets you, greet them back warmly.
----
-
-Context:
-{context}
-
-Question:
-{question}
-
-Answer as Arnav:
+"""
+This is a Python script that serves as a frontend for a conversational AI model built with the `langchain` and `llms` libraries.
+The code creates a web application using Streamlit, a Python library for building interactive web apps.
+# Author: Avratanu Biswas
+# Date: March 11, 2023
 """
 
-# Load embedding model and vector store
-def load_embeddings():
-    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+# Import necessary libraries
+import streamlit as st
+from langchain.chains import ConversationChain
+from langchain.chains.conversation.memory import ConversationEntityMemory
+from langchain.chains.conversation.prompt import ENTITY_MEMORY_CONVERSATION_TEMPLATE
+from langchain.llms import OpenAI
 
-def load_vectorstore(embeddings):
-    return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
+# Set Streamlit page configuration
+st.set_page_config(page_title='🧠MemoryBot🤖', layout='wide')
+# Initialize session states
+if "generated" not in st.session_state:
+    st.session_state["generated"] = []
+if "past" not in st.session_state:
+    st.session_state["past"] = []
+if "input" not in st.session_state:
+    st.session_state["input"] = ""
+if "stored_session" not in st.session_state:
+    st.session_state["stored_session"] = []
 
-# Stream handler to display live token stream
-class StreamHandler(BaseCallbackHandler):
-    def __init__(self, container):
-        self.container = container
-        self.text = ""
+# Define function to get user input
+def get_text():
+    """
+    Get the user input text.
 
-    def on_llm_new_token(self, token: str, **kwargs):
-        self.text += token
-        self.container.markdown(self.text + "▌")
+    Returns:
+        (str): The text entered by the user
+    """
+    input_text = st.text_input("You: ", st.session_state["input"], key="input",
+                            placeholder="Your AI assistant here! Ask me anything ...", 
+                            label_visibility='hidden')
+    return input_text
 
-# Sidebar with controls
-with st.sidebar:
-    st.title("⚙️ Controls")
-    st.markdown("Configure your chat preferences.")
-    model = st.selectbox("LLM Model", options=["gpt-3.5-turbo"], index=0)
-    st.session_state.K = st.number_input("# of turns to remember", min_value=3, max_value=100, value=5)
-    st.button("New Chat", on_click=lambda: [
-        st.session_state.chat_chain.memory.clear(),
-        st.session_state.chat_history.clear()
-    ])
+# Define function to start a new chat
+def new_chat():
+    """
+    Clears session state and starts a new chat.
+    """
+    save = []
+    for i in range(len(st.session_state['generated'])-1, -1, -1):
+        save.append("User:" + st.session_state["past"][i])
+        save.append("Bot:" + st.session_state["generated"][i])        
+    st.session_state["stored_session"].append(save)
+    st.session_state["generated"] = []
+    st.session_state["past"] = []
+    st.session_state["input"] = ""
+    st.session_state.entity_memory.entity_store = {}
+    st.session_state.entity_memory.buffer.clear()
 
-# Initialize memory and embedding-backed chain
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+# Set up sidebar with various options
+with st.sidebar.expander("🛠️ ", expanded=False):
+    # Option to preview memory store
+    if st.checkbox("Preview memory store"):
+        with st.expander("Memory-Store", expanded=False):
+            st.session_state.entity_memory.store
+    # Option to preview memory buffer
+    if st.checkbox("Preview memory buffer"):
+        with st.expander("Bufffer-Store", expanded=False):
+            st.session_state.entity_memory.buffer
+    MODEL = st.selectbox(label='Model', options=['gpt-3.5-turbo','text-davinci-003','text-davinci-002','code-davinci-002'])
+    K = st.number_input(' (#)Summary of prompts to consider',min_value=3,max_value=1000)
 
-if "chat_chain" not in st.session_state:
-    base_llm = ChatOpenAI(model_name=model, openai_api_key=OPENAI_API_KEY)
-    memory = ConversationEntityMemory(llm=base_llm, memory_key="chat_history", return_messages=True, k=st.session_state.K)
-    embeddings = load_embeddings()
-    vector_db = load_vectorstore(embeddings)
-    prompt = PromptTemplate(input_variables=["context", "question"], template=PROMPT_TEMPLATE)
-    st.session_state.chat_chain = ConversationalRetrievalChain.from_llm(
-        llm=base_llm,
-        retriever=vector_db.as_retriever(),
-        memory=memory,
-        combine_docs_chain_kwargs={"prompt": prompt},
-        return_source_documents=False,
-    )
+# Set up the Streamlit app layout
+st.title("🤖 Chat Bot with 🧠")
+st.subheader(" Powered by 🦜 LangChain + OpenAI + Streamlit")
 
-# Header
-st.title("🧠 RealMe.AI")
-st.subheader("Ask anything about Arnav Atri")
-st.divider()
+# Ask the user to enter their OpenAI API key
+API_O = st.sidebar.text_input("OPENAI-API-KEY", type="password")
 
-# Chat input and output
-user_input = st.chat_input("Ask Arnav anything...")
+# Session state storage would be ideal
+if API_O:
+    # Create an OpenAI instance
+    llm = OpenAI(temperature=0,
+                openai_api_key=API_O, 
+                model_name=MODEL, 
+                verbose=False) 
+
+
+    # Create a ConversationEntityMemory object if not already created
+    if 'entity_memory' not in st.session_state:
+            st.session_state.entity_memory = ConversationEntityMemory(llm=llm, k=K )
+        
+        # Create the ConversationChain object with the specified configuration
+    Conversation = ConversationChain(
+            llm=llm, 
+            prompt=ENTITY_MEMORY_CONVERSATION_TEMPLATE,
+            memory=st.session_state.entity_memory
+        )  
+else:
+    st.sidebar.warning('API key required to try this app.The API key is not stored in any form.')
+    # st.stop()
+
+
+# Add a button to start a new chat
+st.sidebar.button("New Chat", on_click = new_chat, type='primary')
+
+# Get the user input
+user_input = get_text()
+
+# Generate the output using the ConversationChain object and the user input, and add the input/output to the session
 if user_input:
-    with st.chat_message("user", avatar="🧑‍💻"):
-        st.markdown(user_input)
+    output = Conversation.run(input=user_input)  
+    st.session_state.past.append(user_input)  
+    st.session_state.generated.append(output)  
 
-    with st.chat_message("assistant", avatar="🤖") as container:
-        stream_placeholder = st.empty()
-        stream_handler = StreamHandler(stream_placeholder)
-        llm_stream = ChatOpenAI(model_name=model, openai_api_key=OPENAI_API_KEY, streaming=True, callbacks=[stream_handler])
-        embeddings = load_embeddings()
-        vector_db = load_vectorstore(embeddings)
-        prompt = PromptTemplate(input_variables=["context", "question"], template=PROMPT_TEMPLATE)
-        st.session_state.chat_chain = ConversationalRetrievalChain.from_llm(
-            llm=llm_stream,
-            retriever=vector_db.as_retriever(),
-            memory=st.session_state.chat_chain.memory,
-            combine_docs_chain_kwargs={"prompt": prompt},
-            return_source_documents=False,
-        )
-        st.session_state.chat_chain.invoke({"question": user_input})
+# Allow to download as well
+download_str = []
+# Display the conversation history using an expander, and allow the user to download it
+with st.expander("Conversation", expanded=True):
+    for i in range(len(st.session_state['generated'])-1, -1, -1):
+        st.info(st.session_state["past"][i],icon="🧐")
+        st.success(st.session_state["generated"][i], icon="🤖")
+        download_str.append(st.session_state["past"][i])
+        download_str.append(st.session_state["generated"][i])
+    
+    # Can throw error - requires fix
+    download_str = '\n'.join(download_str)
+    if download_str:
+        st.download_button('Download',download_str)
 
-# Show past chat history
-with st.expander("Conversation History", expanded=True):
-    for msg in st.session_state.chat_chain.memory.chat_memory.messages:
-        if msg.type == "human":
-            st.info(msg.content, icon="🤖")
-        else:
-            st.success(msg.content, icon="😊")
+# Display stored conversation sessions in the sidebar
+for i, sublist in enumerate(st.session_state.stored_session):
+        with st.sidebar.expander(label= f"Conversation-Session:{i}"):
+            st.write(sublist)
 
-# Footer
-st.markdown("""
-<hr style="margin-top: 30px;">
-<div style="text-align: center; font-size: 16px;">
-🤝 <strong>Let’s connect</strong><br>
-<a href="https://www.linkedin.com/in/arnav-atri-315547347/" target="_blank" style="text-decoration: none; margin: 0 20px;">
-🔗 LinkedIn
-</a>
-|
-<a href="https://mail.google.com/mail/?view=cm&fs=1&to=arnavatri5@gmail.com&su=Hello+Arnav&body=I+found+your+RealMe.AI+chatbot+amazing!" target="_blank" style="text-decoration: none;">
-📧 Email
-</a>
-</div>
-""", unsafe_allow_html=True)
+# Allow the user to clear all stored conversation sessions
+if st.session_state.stored_session:   
+    if st.sidebar.checkbox("Clear-all"):
+        del st.session_state.stored_session
