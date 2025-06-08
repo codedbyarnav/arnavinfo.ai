@@ -27,14 +27,17 @@ Context:
 {context}
 
 Question:
-{question}
+{input}
 
 Answer as Arnav:
 """
 
 # Load embeddings and vector store
 def load_embeddings():
-    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    return HuggingFaceEmbeddings(
+        model_name="all-MiniLM-L6-v2",
+        model_kwargs={"device": "cpu"}
+    )
 
 def load_vectorstore(embeddings):
     return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
@@ -62,7 +65,7 @@ def get_conversational_chain(stream_handler, memory):
     )
 
     prompt = PromptTemplate(
-        input_variables=["context", "question"],
+        input_variables=["context", "input"],
         template=PROMPT_TEMPLATE,
     )
 
@@ -112,9 +115,9 @@ if user_input:
         # Rebuild chain with current handler
         st.session_state.chat_chain = get_conversational_chain(handler, st.session_state.memory)
 
-        # Ask the question using the correct input key
+        # Use correct input key
         st.session_state.chat_chain.invoke({
-            "question": user_input
+            "input": user_input
         })
 
 # Footer
