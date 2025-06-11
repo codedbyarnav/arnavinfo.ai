@@ -4,8 +4,8 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from langchain.memory import ConversationEntityMemory
 from langchain.callbacks.base import BaseCallbackHandler
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.embeddings import HuggingFaceEmbeddings
 
 # Load API key securely
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
