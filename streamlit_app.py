@@ -15,13 +15,10 @@ st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
 PROMPT_TEMPLATE = """
 You are Arnav Atri's AI twin. You will carry a memory of Arnav's life and conversations with users.
 
-Maintain friendly tone, respond with Arnav's perspective, and use remembered facts about people, places, or preferences as the chat continues.
+Maintain a friendly tone, respond with Arnav's perspective, and use remembered facts about people, places, or preferences as the chat continues.
 
 Current conversation history:
 {history}
-
-Entities so far:
-{entities}
 
 New user input:
 {input}
@@ -48,10 +45,15 @@ def get_entity_memory_chain(stream_handler):
         callbacks=[stream_handler],
     )
 
-    memory = ConversationEntityMemory(llm=llm)
+    memory = ConversationEntityMemory(
+        llm=llm,
+        memory_key="history",
+        input_key="input",
+        return_messages=True
+    )
 
     prompt = PromptTemplate(
-        input_variables=["history", "input", "entities"],
+        input_variables=["history", "input"],
         template=PROMPT_TEMPLATE,
     )
 
@@ -84,9 +86,9 @@ if user_input:
         stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
 
-        # Create new LLMChain with streaming and memory
-        chat_chain = get_entity_memory_chain(stream_handler)
-        st.session_state.chat_chain = chat_chain  # Replace to retain memory
+        # Use same memory across runs (no reset)
+        chat_chain = st.session_state.chat_chain
+        chat_chain.llm.callbacks = [stream_handler]
 
         # Ask the question
         chat_chain.invoke({"input": user_input})
