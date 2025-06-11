@@ -1,113 +1,127 @@
-import streamlit as st
-from langchain.chains import ConversationChain
-from langchain.memory import ConversationEntityMemory
-from langchain.prompts import PromptTemplate
-from langchain.llms import OpenAI
+#working code
 
-# ✅ Replacing deprecated ENTITY_MEMORY_CONVERSATION_TEMPLATE
-ENTITY_MEMORY_CONVERSATION_TEMPLATE = PromptTemplate.from_template("""
-You are a helpful assistant. Use the context and conversation history to answer the user's question.
+import streamlit as st
+
+from langchain_community.vectorstores import FAISS
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.prompts import PromptTemplate
+from langchain.chat_models import ChatOpenAI
+from langchain.callbacks.base import BaseCallbackHandler
+
+# Load API key securely
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+
+# Streamlit page config
+st.set_page_config(page_title="RealMe.AI - Ask Arnav", page_icon="🧠")
+
+# Constants
+VECTOR_STORE_PATH = "vectorstore/db_faiss"
+PROMPT_TEMPLATE = """
+You are Arnav Atri's personal AI replica. You respond as if you are Arnav himself—sharing facts, experiences, interests, and personality in a natural, friendly, and personal tone.
+
+Only use the provided information to answer. Do not mention that you are an AI or that your answers come from a context or dataset.
+If you're unsure of something, say "I'm not sure about that yet, but happy to chat more!"
+If user greets you, greet them back warmly.
+---
 
 Context:
-{history}
+{context}
 
-Current Input:
-{input}
+Question:
+{question}
 
-Answer:""")
+Answer as Arnav:
+"""
 
-st.set_page_config(page_title='🧠MemoryBot🤖', layout='wide')
+# Embeddings and vector store loader
+def load_embeddings():
+    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-if "generated" not in st.session_state:
-    st.session_state["generated"] = []
-if "past" not in st.session_state:
-    st.session_state["past"] = []
-if "input" not in st.session_state:
-    st.session_state["input"] = ""
-if "stored_session" not in st.session_state:
-    st.session_state["stored_session"] = []
+def load_vectorstore(embeddings):
+    return FAISS.load_local(VECTOR_STORE_PATH, embeddings, allow_dangerous_deserialization=True)
 
-def get_text():
-    return st.text_input("You: ", st.session_state["input"], key="input",
-                         placeholder="Your AI assistant here! Ask me anything ...",
-                         label_visibility='hidden')
+# Streaming handler to stream inside chat bubble
+class StreamHandler(BaseCallbackHandler):
+    def __init__(self, container):
+        self.container = container
+        self.text = ""
 
-def new_chat():
-    save = []
-    for i in range(len(st.session_state['generated']) - 1, -1, -1):
-        save.append("User: " + st.session_state["past"][i])
-        save.append("Bot: " + st.session_state["generated"][i])
-    st.session_state["stored_session"].append(save)
-    st.session_state["generated"] = []
-    st.session_state["past"] = []
-    st.session_state["input"] = ""
-    if "entity_memory" in st.session_state:
-        st.session_state.entity_memory.entity_store = {}
-        st.session_state.entity_memory.buffer.clear()
+    def on_llm_new_token(self, token: str, **kwargs):
+        self.text += token
+        self.container.markdown(self.text + "▌")  # live update with cursor
 
-with st.sidebar.expander("🛠️ Options", expanded=False):
-    if st.checkbox("Preview memory store"):
-        with st.expander("Memory Store", expanded=False):
-            if "entity_memory" in st.session_state:
-                st.write(st.session_state.entity_memory.store)
-    if st.checkbox("Preview memory buffer"):
-        with st.expander("Buffer Store", expanded=False):
-            if "entity_memory" in st.session_state:
-                st.write(st.session_state.entity_memory.buffer)
-    MODEL = st.selectbox(label='Model', options=['text-davinci-003', 'gpt-3.5-turbo'])
-    K = st.number_input(' (#) Summary of prompts to consider', min_value=3, max_value=1000, value=5)
+# Chain builder
+def get_conversational_chain(stream_handler):
+    llm = ChatOpenAI(
+        model_name="gpt-3.5-turbo",
+        openai_api_key=OPENAI_API_KEY,
+        streaming=True,
+        callbacks=[stream_handler],
+    )
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    embeddings = load_embeddings()
+    vector_db = load_vectorstore(embeddings)
 
-st.title("🤖 Chat Bot with 🧠")
-st.subheader("Powered by 🦜 LangChain + OpenAI + Streamlit")
-
-API_O = st.sidebar.text_input("API-KEY", type="password")
-
-if API_O:
-    llm = OpenAI(
-        temperature=0,
-        openai_api_key=API_O,
-        model_name=MODEL,
-        verbose=False
+    prompt = PromptTemplate(
+        input_variables=["context", "question"],
+        template=PROMPT_TEMPLATE,
     )
 
-    if 'entity_memory' not in st.session_state:
-        st.session_state.entity_memory = ConversationEntityMemory(llm=llm, k=K)
-
-    Conversation = ConversationChain(
+    return ConversationalRetrievalChain.from_llm(
         llm=llm,
-        prompt=ENTITY_MEMORY_CONVERSATION_TEMPLATE,
-        memory=st.session_state.entity_memory,
-        verbose=False
+        retriever=vector_db.as_retriever(),
+        memory=memory,
+        combine_docs_chain_kwargs={"prompt": prompt},
+        return_source_documents=False,
     )
-else:
-    st.sidebar.warning('⚠️ API key required to try this app.')
-    st.stop()
 
-st.sidebar.button("New Chat", on_click=new_chat, type='primary')
+# Header
+st.markdown("<h1 style='text-align: center;'>🧠 RealMe.AI</h1>", unsafe_allow_html=True)
+st.markdown("<h4 style='text-align: center; color: gray;'>Ask anything about Arnav Atri</h4>", unsafe_allow_html=True)
+st.divider()
 
-user_input = get_text()
+# Initialize chat chain once
+if "chat_chain" not in st.session_state:
+    dummy_container = st.empty()  # Placeholder for first stream handler
+    stream_handler = StreamHandler(dummy_container)
+    st.session_state.chat_chain = get_conversational_chain(stream_handler)
 
+# Show previous messages
+for msg in st.session_state.chat_chain.memory.chat_memory.messages:
+    role = "user" if msg.type == "human" else "assistant"
+    avatar = "🧑‍💻" if role == "user" else "🤖"
+   
+
+# Input box
+user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
-    output = Conversation.run(input=user_input)
-    st.session_state.past.append(user_input)
-    st.session_state.generated.append(output)
+    with st.chat_message("user", avatar="🧑‍💻"):
+        st.markdown(user_input)
 
-download_str = []
-with st.expander("Conversation", expanded=True):
-    for i in range(len(st.session_state['generated']) - 1, -1, -1):
-        st.info(st.session_state["past"][i], icon="🧐")
-        st.success(st.session_state["generated"][i], icon="🤖")
-        download_str.append(st.session_state["past"][i])
-        download_str.append(st.session_state["generated"][i])
+    with st.chat_message("assistant", avatar="🤖") as assistant_container:
+        stream_placeholder = st.empty()
+        stream_handler = StreamHandler(stream_placeholder)
 
-    download_str = '\n'.join(download_str)
-    if download_str:
-        st.download_button('Download', download_str)
+        # Create new LLM with streaming callback (fresh one per run)
+        chat_chain = get_conversational_chain(stream_handler)
+        st.session_state.chat_chain = chat_chain  # Replace to retain memory
 
-for i, sublist in enumerate(st.session_state["stored_session"]):
-    with st.sidebar.expander(label=f"Conversation-Session:{i}"):
-        st.write(sublist)
+        # Ask the question
+        chat_chain.invoke({"question": user_input})
 
-if st.session_state["stored_session"]:
-    if st.sidebar.checkbox("Clear-all"):
-        del st.session_state["stored_session"]
+# Footer
+st.markdown("""
+<hr style="margin-top: 30px;">
+<div style="text-align: center; font-size: 16px;">
+🤝 <strong>Let’s connect</strong><br>
+<a href="https://www.linkedin.com/in/arnav-atri-315547347/" target="_blank" style="text-decoration: none; margin: 0 20px;">
+🔗 LinkedIn
+</a>
+|
+<a href="https://mail.google.com/mail/?view=cm&fs=1&to=arnavatri5@gmail.com&su=Hello+Arnav&body=I+found+your+RealMe.AI+chatbot+amazing!" target="_blank" style="text-decoration: none;">
+📧 Email
+</a>
+</div>
+""", unsafe_allow_html=True)
