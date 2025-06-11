@@ -113,6 +113,7 @@ for message in st.session_state.chat_chain.memory.chat_memory.messages:
         st.markdown(message.content)
 
 # Input box
+# Input box
 user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
@@ -122,15 +123,16 @@ if user_input:
         stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
 
-    # Use the existing memory-enabled chain
+        # Use the existing memory-enabled chain
         chat_chain = st.session_state.chat_chain
         chat_chain.llm.callbacks = [stream_handler]
 
-    # Invoke the chat chain (this does not return anything when streaming)
+        # Streaming response (invoke returns None)
         chat_chain.invoke({"input": user_input})
 
-    # Optional: re-render to clean up the cursor ▌
+        # Re-render the clean final output (removes trailing ▌ and avoids "None")
         stream_placeholder.markdown(stream_handler.text)
+
 
 
 
