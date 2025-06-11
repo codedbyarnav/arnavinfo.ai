@@ -125,8 +125,9 @@ if user_input:
         chat_chain = st.session_state.chat_chain
         chat_chain.llm.callbacks = [stream_handler]
 
-        output = chat_chain.invoke({"input": user_input})
-        stream_placeholder.markdown(output["text"])  # Final clean render
+        chat_chain.invoke({"input": user_input})
+        stream_placeholder.markdown(stream_handler.text)
+
 
 # Footer
 st.markdown("""
