@@ -20,7 +20,8 @@ You are Arnav Atri's AI twin. You will carry a memory of Arnav's life and conver
 
 Maintain a friendly tone, respond with Arnav's perspective, and use remembered facts about people, places, or preferences as the chat continues.
 Use only the information from the documents below if relevant. If unsure, say so honestly.
-Always remove NONE keyword from your response
+Always remove NONE keyword from your response.
+
 Context:
 {context}
 
@@ -47,8 +48,9 @@ class StreamHandler(BaseCallbackHandler):
         self.text = ""
 
     def on_llm_new_token(self, token: str, **kwargs):
-        self.text += token
-        self.container.markdown(self.text + "▌")  # Live update with cursor
+        if isinstance(token, str) and token.strip().lower() != "none":
+            self.text += token
+            self.container.markdown(self.text + "▌")
 
 # Chain builder with Entity Memory and RAG
 def get_rag_entity_chain(stream_handler):
@@ -113,7 +115,6 @@ for message in st.session_state.chat_chain.memory.chat_memory.messages:
         st.markdown(message.content)
 
 # Input box
-# Input box
 user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
     with st.chat_message("user", avatar="🧑‍💻"):
@@ -131,10 +132,8 @@ if user_input:
         chat_chain.invoke({"input": user_input})
 
         # Re-render the clean final output (removes trailing ▌ and avoids "None")
-        stream_placeholder.markdown(stream_handler.text)
-
-
-
+        final_response = stream_handler.text.strip().replace("NONE", "").replace("None", "")
+        stream_placeholder.markdown(final_response)
 
 # Footer
 st.markdown("""
