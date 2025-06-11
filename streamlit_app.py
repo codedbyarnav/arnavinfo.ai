@@ -76,6 +76,7 @@ for message in st.session_state.chat_chain.memory.chat_memory.messages:
                          avatar="🧑‍💻" if message.type == "human" else "🤖"):
         st.markdown(message.content)
 
+
 # Input box
 user_input = st.chat_input("Ask Arnav anything...")
 if user_input:
@@ -86,12 +87,16 @@ if user_input:
         stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
 
-        # Use same memory across runs (no reset)
+        # Use the existing memory-enabled chain
         chat_chain = st.session_state.chat_chain
         chat_chain.llm.callbacks = [stream_handler]
 
-        # Ask the question
-        chat_chain.invoke({"input": user_input})
+        # Clean output: Avoid rendering 'None'
+        output = chat_chain.invoke({"input": user_input})
+
+        # Optionally re-render clean final message (optional, if needed)
+        stream_placeholder.markdown(output["text"])  # safely replace last streamed content
+
 
 # Footer
 st.markdown("""
