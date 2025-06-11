@@ -119,14 +119,19 @@ if user_input:
         st.markdown(user_input)
 
     with st.chat_message("assistant", avatar="🤖") as assistant_container:
-        stream_placeholder = st.empty()
-        stream_handler = StreamHandler(stream_placeholder)
+    stream_placeholder = st.empty()
+    stream_handler = StreamHandler(stream_placeholder)
 
-        chat_chain = st.session_state.chat_chain
-        chat_chain.llm.callbacks = [stream_handler]
+    # Use the existing memory-enabled chain
+    chat_chain = st.session_state.chat_chain
+    chat_chain.llm.callbacks = [stream_handler]
 
-        chat_chain.invoke({"input": user_input})
-        stream_placeholder.markdown(stream_handler.text)
+    # Invoke the chat chain (this does not return anything when streaming)
+    chat_chain.invoke({"input": user_input})
+
+    # Optional: re-render to clean up the cursor ▌
+    stream_placeholder.markdown(stream_handler.text)
+
 
 
 # Footer
