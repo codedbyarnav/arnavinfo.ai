@@ -89,9 +89,13 @@ if "chat_chain" not in st.session_state:
     st.session_state.chat_chain = get_conversational_chain(stream_handler)
 
 # Show previous messages
-for msg in st.session_state.chat_chain.memory.chat_memory.messages:
+# Show previous messages (newest at bottom)
+for msg in reversed(st.session_state.chat_chain.memory.chat_memory.messages):
     role = "user" if msg.type == "human" else "assistant"
     avatar = "🧑‍💻" if role == "user" else "🤖"
+    with st.chat_message(role, avatar=avatar):
+        st.markdown(msg.content)
+
    
 
 # Input box
