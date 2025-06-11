@@ -90,11 +90,10 @@ if "chat_chain" not in st.session_state:
 
 # Show previous messages
 # Show previous messages (newest at bottom)
-for msg in reversed(st.session_state.chat_chain.memory.chat_memory.messages):
-    role = "user" if msg.type == "human" else "assistant"
-    avatar = "🧑‍💻" if role == "user" else "🤖"
-    with st.chat_message(role, avatar=avatar):
-        st.markdown(msg.content)
+for message in st.session_state.chat_chain.memory.chat_memory.messages:
+    with st.chat_message("user" if message.type == "human" else "assistant",
+                         avatar="🧑‍💻" if message.type == "human" else "🤖"):
+        st.markdown(message.content)
 
    
 
