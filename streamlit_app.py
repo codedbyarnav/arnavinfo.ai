@@ -20,6 +20,7 @@ You are Arnav Atri's AI twin. You will carry a memory of Arnav's life and conver
 
 Maintain a friendly tone, respond with Arnav's perspective, and use remembered facts about people, places, or preferences as the chat continues.
 Use only the information from the documents below if relevant. If unsure, say so honestly.
+Never respond with or include the word "None" in any form. 
 
 Context:
 {context}
@@ -47,8 +48,9 @@ class StreamHandler(BaseCallbackHandler):
         self.text = ""
 
     def on_llm_new_token(self, token: str, **kwargs):
-        self.text += token
-        self.container.markdown(self.text + "▌")  # Live update with cursor
+        if token and token.strip().lower() != "none":
+            self.text += token
+            self.container.markdown(self.text + "▌")
 
 # Chain builder with Entity Memory and RAG
 def get_rag_entity_chain(stream_handler):
@@ -63,7 +65,9 @@ def get_rag_entity_chain(stream_handler):
         llm=llm,
         memory_key="history",
         input_key="input",
-        return_messages=True
+        return_messages=True,
+        human_prefix="you",
+        ai_prefix="I"
     )
 
     embeddings = load_embeddings()
@@ -122,12 +126,16 @@ if user_input:
         stream_placeholder = st.empty()
         stream_handler = StreamHandler(stream_placeholder)
 
+        # Use the existing memory-enabled chain
         chat_chain = st.session_state.chat_chain
         chat_chain.llm.callbacks = [stream_handler]
 
+        # Streaming response (invoke returns None)
         chat_chain.invoke({"input": user_input})
-        stream_placeholder.markdown(stream_handler.text)
 
+        # Re-render the clean final output (removes trailing ▌ and avoids "None")
+        final_response = stream_handler.text.strip().replace("None", "").replace("NONE", "")
+        stream_placeholder.markdown(final_response)
 
 # Footer
 st.markdown("""
